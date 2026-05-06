@@ -11,13 +11,13 @@ Align the sync-engine protocol with Airbyte's design: wrapper envelope messages,
 **Before (flat):**
 
 ```json
-{"type":"record","stream":"customer","data":{...},"emitted_at":"..."}
+{"type":"record","stream":"customers","data":{...},"emitted_at":"..."}
 ```
 
 **After (envelope):**
 
 ```json
-{"type":"record","record":{"stream":"customer","data":{...},"emitted_at":"..."}}
+{"type":"record","record":{"stream":"customers","data":{...},"emitted_at":"..."}}
 ```
 
 - Type discriminator uses lowercase values: `record`, `state`, `log`, `spec`, `connection_status`, `catalog`, `control`, `trace`, `eof`
@@ -30,8 +30,8 @@ Single `trace` message with subtypes:
 
 ```json
 {"type":"trace","trace":{"trace_type":"error","error":{"failure_type":"config_error","message":"...","stream":"...","stack_trace":"..."}}}
-{"type":"trace","trace":{"trace_type":"stream_status","stream_status":{"stream":"customer","status":"running"}}}
-{"type":"trace","trace":{"trace_type":"estimate","estimate":{"stream":"customer","row_count":1000}}}
+{"type":"trace","trace":{"trace_type":"stream_status","stream_status":{"stream":"customers","status":"running"}}}
+{"type":"trace","trace":{"trace_type":"estimate","estimate":{"stream":"customers","row_count":1000}}}
 ```
 
 ### 3. All HTTP endpoints return NDJSON streams

@@ -7,7 +7,7 @@ import type {
   ParsedOpenApiSpec,
   ScalarType,
 } from './types.js'
-import { OPENAPI_RESOURCE_TABLE_ALIASES } from './runtimeMappings.js'
+import { OPENAPI_COMPATIBILITY_COLUMNS, OPENAPI_RESOURCE_TABLE_ALIASES } from './runtimeMappings.js'
 
 const SCHEMA_REF_PREFIX = '#/components/schemas/'
 const CRUD_SUFFIXES = ['.created', '.updated', '.deleted'] as const
@@ -15,7 +15,6 @@ const CRUD_SUFFIXES = ['.created', '.updated', '.deleted'] as const
 const RESERVED_COLUMNS = new Set([
   'id',
   '_raw_data',
-  '_synced_at',
   '_last_synced_at',
   '_updated_at',
   '_account_id',
@@ -26,7 +25,7 @@ export { OPENAPI_RESOURCE_TABLE_ALIASES }
 
 /**
  * Resolve a Stripe x-resourceId to a canonical table name.
- * Singular, snake_cased, with version namespace dots converted to underscores.
+ * Pure utility — depends only on aliases, not the spec.
  */
 export function resolveTableName(
   resourceId: string,
@@ -34,7 +33,8 @@ export function resolveTableName(
 ): string {
   const alias = aliases[resourceId]
   if (alias) return alias
-  return resourceId.toLowerCase().replace(/[.]/g, '_')
+  const normalized = resourceId.toLowerCase().replace(/[.]/g, '_')
+  return normalized.endsWith('s') ? normalized : `${normalized}s`
 }
 
 /** A list endpoint at a top-level path (`/v1/customers`). */
@@ -56,14 +56,6 @@ export type NestedEndpoint = {
   parentTableName: string
   parentParamName: string
   supportsPagination: boolean
-}
-
-export type CreateEndpoint = {
-  tableName: string
-  resourceId: string
-  apiPath: string
-  requestFields: Set<string>
-  bodyEncoding: 'form' | 'json'
 }
 
 type ColumnAccumulator = {
@@ -163,6 +155,27 @@ export class SpecParser {
       }
 
       tableMap.set(tableName, existing)
+    }
+
+    for (const tableName of Array.from(allowedTables).sort((a, b) => a.localeCompare(b))) {
+      const current =
+        tableMap.get(tableName) ??
+        ({
+          resourceId: tableName,
+          sourceSchemaName: 'compatibility_fallback',
+          columns: new Map<string, ColumnAccumulator>(),
+        } as const)
+      for (const compatibilityColumn of OPENAPI_COMPATIBILITY_COLUMNS[tableName] ?? []) {
+        const existing = current.columns.get(compatibilityColumn.name)
+        if (!existing) {
+          current.columns.set(compatibilityColumn.name, {
+            type: compatibilityColumn.type,
+            nullable: compatibilityColumn.nullable,
+            expandableReference: compatibilityColumn.expandableReference ?? false,
+          })
+        }
+      }
+      tableMap.set(tableName, current)
     }
 
     const tables = Array.from(tableMap.entries())
@@ -296,37 +309,6 @@ export class SpecParser {
       })
     }
     return nested
-  }
-
-  /**
-   * Discover top-level create endpoints whose POST path matches a list endpoint
-   * collection path, e.g. GET/POST `/v1/customers`.
-   */
-  discoverCreateEndpoints(
-    spec: OpenApiSpec,
-    aliases: Record<string, string> = OPENAPI_RESOURCE_TABLE_ALIASES
-  ): Map<string, CreateEndpoint> {
-    const endpoints = new Map<string, CreateEndpoint>()
-    for (const raw of this.iterListPaths(spec)) {
-      if (raw.isNested) continue
-      const postOp = spec.paths?.[raw.apiPath]?.post
-      if (!postOp) continue
-
-      const requestBody = this.createRequestBody(postOp, spec)
-      if (!requestBody || requestBody.requestFields.size === 0) continue
-
-      const tableName = resolveTableName(raw.resourceId, aliases)
-      if (endpoints.has(tableName)) continue
-
-      endpoints.set(tableName, {
-        tableName,
-        resourceId: raw.resourceId,
-        apiPath: raw.apiPath,
-        requestFields: requestBody.requestFields,
-        bodyEncoding: requestBody.bodyEncoding,
-      })
-    }
-    return endpoints
   }
 
   /**
@@ -468,10 +450,10 @@ export class SpecParser {
 
   private collectEnabledEventTypes(spec: OpenApiSpec): Set<string> {
     const types = new Set<string>()
-    const schema =
-      spec.paths?.['/v1/webhook_endpoints']?.post?.requestBody?.content?.[
-        'application/x-www-form-urlencoded'
-      ]?.schema
+    const op = spec.paths?.['/v1/webhook_endpoints']?.post as
+      | { requestBody?: { content?: Record<string, { schema?: OpenApiSchemaOrReference }> } }
+      | undefined
+    const schema = op?.requestBody?.content?.['application/x-www-form-urlencoded']?.schema
     if (!schema || '$ref' in schema) return types
     const enabledEvents = schema.properties?.enabled_events
     if (!enabledEvents || '$ref' in enabledEvents) return types
@@ -483,31 +465,6 @@ export class SpecParser {
       if (typeof value === 'string') types.add(value)
     }
     return types
-  }
-
-  private createRequestBody(
-    operation: {
-      requestBody?: { content?: Record<string, { schema?: OpenApiSchemaOrReference }> }
-    },
-    spec: OpenApiSpec
-  ): { requestFields: Set<string>; bodyEncoding: 'form' | 'json' } | undefined {
-    const formSchema = operation.requestBody?.content?.['application/x-www-form-urlencoded']?.schema
-    if (formSchema) {
-      return {
-        requestFields: new Set(this.collectPropertyCandidates(formSchema, spec).keys()),
-        bodyEncoding: 'form',
-      }
-    }
-
-    const jsonSchema = operation.requestBody?.content?.['application/json']?.schema
-    if (jsonSchema) {
-      return {
-        requestFields: new Set(this.collectPropertyCandidates(jsonSchema, spec).keys()),
-        bodyEncoding: 'json',
-      }
-    }
-
-    return undefined
   }
 
   /** Match event types like `customer.created` or `v2.core.account.updated` against listable resource ids. */
@@ -554,50 +511,6 @@ export class SpecParser {
 
     if (schema.properties?.next_page_url) return true
 
-    return false
-  }
-
-  /**
-   * Detect whether a property schema is a list envelope.
-   * List envelopes ({data, has_more, url, object: "list"}) are transport wrappers,
-   * not part of the parent row shape per rule #9 of the schema spec.
-   */
-  private isListEnvelopeSchema(schema: OpenApiSchemaObject): boolean {
-    const dataProp = schema.properties?.data
-    if (!dataProp || !('type' in dataProp) || dataProp.type !== 'array') return false
-
-    const objectProp = schema.properties?.object
-    if (objectProp && 'enum' in objectProp && objectProp.enum?.includes('list')) return true
-
-    if (schema.properties?.next_page_url) return true
-
-    return false
-  }
-
-  /**
-   * Detect whether a composition (oneOf/anyOf/allOf) contains only list envelope schemas.
-   * If all branches are list envelopes, the entire property should be excluded.
-   */
-  private isListEnvelopeInComposition(
-    schema: OpenApiSchemaOrReference,
-    spec: OpenApiSpec
-  ): boolean {
-    if (this.isReference(schema)) {
-      return false
-    }
-
-    const compositions: (OpenApiSchemaOrReference[] | undefined)[] = [
-      schema.oneOf,
-      schema.anyOf,
-      schema.allOf,
-    ]
-    for (const composed of compositions) {
-      if (!composed) continue
-      const resolved = composed.map((s) => (this.isReference(s) ? this.resolveSchema(s, spec) : s))
-      if (resolved.length > 0 && resolved.every((s) => this.isListEnvelopeSchema(s))) {
-        return true
-      }
-    }
     return false
   }
 
@@ -740,32 +653,12 @@ export class SpecParser {
     }
 
     for (const [name, value] of Object.entries(schema.properties ?? {})) {
-      if (this.isReference(value)) {
-        const resolved = this.resolveSchema(value, spec)
-        if (this.isListEnvelopeSchema(resolved)) continue
-      } else if ('type' in value && value.type === 'object' && this.isListEnvelopeSchema(value)) {
-        continue
-      } else if (this.isListEnvelopeInComposition(value, spec)) {
-        continue
-      }
       pushProp(name, value)
     }
 
     for (const composed of [schema.allOf, schema.oneOf, schema.anyOf]) {
       if (!composed) continue
       for (const subSchema of composed) {
-        if (this.isReference(subSchema)) {
-          const resolved = this.resolveSchema(subSchema, spec)
-          if (this.isListEnvelopeSchema(resolved)) continue
-        } else if (
-          'type' in subSchema &&
-          subSchema.type === 'object' &&
-          this.isListEnvelopeSchema(subSchema)
-        ) {
-          continue
-        } else if (this.isListEnvelopeInComposition(subSchema, spec)) {
-          continue
-        }
         const subProps = this.collectPropertyCandidates(subSchema, spec, seenRefs, seenSchemas)
         for (const [name, candidates] of subProps.entries()) {
           for (const candidate of candidates) {

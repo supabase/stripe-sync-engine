@@ -17,15 +17,15 @@ The old monolith solved this with database-backed worker task queues and paralle
 ```
 Coordinator Edge Function
   │
-  │  source.discover() → ["customer", "invoice", "price", ...]
+  │  source.discover() → ["customers", "invoices", "prices", ...]
   │  INSERT INTO _sync_state (sync_id, stream, status) for each stream
   │
   │  For each stream: POST /backfill-worker { syncId, stream }
   │
-  ├──► Worker: customer  ──► self-reinvoke ──► self-reinvoke ──► complete
-  ├──► Worker: invoice   ──► self-reinvoke ──► complete
-  ├──► Worker: price     ──► complete (small table, fits in one invocation)
-  └──► Worker: product   ──► self-reinvoke ──► complete
+  ├──► Worker: customers  ──► self-reinvoke ──► self-reinvoke ──► complete
+  ├──► Worker: invoices   ──► self-reinvoke ──► complete
+  ├──► Worker: prices     ──► complete (small table, fits in one invocation)
+  └──► Worker: products   ──► self-reinvoke ──► complete
          │
          │  all workers write directly to destination Postgres
          │  all workers update _sync_state with cursor + record count
@@ -247,10 +247,10 @@ ORDER BY stream;
 ```
  stream     | status   | records | updated_at
 ────────────┼──────────┼─────────┼─────────────────────
- customer  | complete |   4,521 | 2024-03-20 12:34:56
- invoice   | syncing  |   1,200 | 2024-03-20 12:34:55
- price     | complete |     342 | 2024-03-20 12:34:50
- product   | pending  |       0 | 2024-03-20 12:34:45
+ customers  | complete |   4,521 | 2024-03-20 12:34:56
+ invoices   | syncing  |   1,200 | 2024-03-20 12:34:55
+ prices     | complete |     342 | 2024-03-20 12:34:50
+ products   | pending  |       0 | 2024-03-20 12:34:45
 ```
 
 A CLI or dashboard can poll this query. The Supabase real-time feature could even push updates via WebSocket.

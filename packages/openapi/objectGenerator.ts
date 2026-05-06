@@ -52,7 +52,7 @@ const ID_PREFIXES: Record<string, string> = {
   topup: 'tu',
   transfer: 'tr',
   webhook_endpoint: 'we',
-  'v2.core.account': 'acct',
+  v2_core_account: 'acct',
   'v2.core.event_destination': 'ed',
   'v2.core.event': 'evt',
 }

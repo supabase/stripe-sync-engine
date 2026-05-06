@@ -17,4 +17,4 @@ echo "Stripe: $ACCT" >&2
 
 $RUN packages/source-stripe/src/bin.ts read \
   --config "{\"api_key\": \"$STRIPE_API_KEY\", \"backfill_limit\": 10}" \
-  --catalog '{"streams":[{"stream":{"name":"product","primary_key":[["id"]]},"sync_mode":"full_refresh","destination_sync_mode":"append"}]}'
+  --catalog '{"streams":[{"stream":{"name":"products","primary_key":[["id"]]},"sync_mode":"full_refresh","destination_sync_mode":"append"}]}'

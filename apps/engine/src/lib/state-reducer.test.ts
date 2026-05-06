@@ -14,21 +14,21 @@ function init(streamNames: string[], syncRunId?: string, prior?: SyncState): Syn
 
 describe('stateReducer initialize event', () => {
   it('creates fresh state with progress seeded from stream names', () => {
-    const state = init(['customer', 'invoice'])
-    expect(state.sync_run.progress.streams).toHaveProperty('customer')
-    expect(state.sync_run.progress.streams).toHaveProperty('invoice')
-    expect(state.sync_run.progress.streams['customer'].status).toBe('not_started')
-    expect(state.sync_run.progress.streams['invoice'].status).toBe('not_started')
+    const state = init(['customers', 'invoices'])
+    expect(state.sync_run.progress.streams).toHaveProperty('customers')
+    expect(state.sync_run.progress.streams).toHaveProperty('invoices')
+    expect(state.sync_run.progress.streams['customers'].status).toBe('not_started')
+    expect(state.sync_run.progress.streams['invoices'].status).toBe('not_started')
   })
 
   it('stamps run_id on fresh state', () => {
-    const state = init(['customer'], 'run-1')
+    const state = init(['customers'], 'run-1')
     expect(state.sync_run.run_id).toBe('run-1')
   })
 
   it('sets time_ceiling when run_id is provided', () => {
     const before = new Date().toISOString()
-    const state = init(['customer'], 'run-1')
+    const state = init(['customers'], 'run-1')
     const after = new Date().toISOString()
     expect(state.sync_run.time_ceiling).toBeDefined()
     expect(state.sync_run.time_ceiling! >= before).toBe(true)
@@ -36,7 +36,7 @@ describe('stateReducer initialize event', () => {
   })
 
   it('does not set time_ceiling when run_id is omitted', () => {
-    const state = init(['customer'])
+    const state = init(['customers'])
     expect(state.sync_run.time_ceiling).toBeUndefined()
   })
 
@@ -58,17 +58,17 @@ describe('stateReducer initialize event', () => {
             total_record_count: 0,
             total_state_count: 0,
           },
-          streams: { customer: { status: 'started', state_count: 2, record_count: 500 } },
+          streams: { customers: { status: 'started', state_count: 2, record_count: 500 } },
         },
       },
     }
-    const state = init(['customer'], 'run-1', prior)
+    const state = init(['customers'], 'run-1', prior)
     expect(state.sync_run.time_ceiling).toBe('2026-01-01T00:00:00.000Z')
   })
 
   it('resets progress when run_id changes', () => {
     const prior: SyncState = {
-      source: { streams: { customer: { cursor: 'cus_99' } }, global: {} },
+      source: { streams: { customers: { cursor: 'cus_99' } }, global: {} },
       destination: {},
       sync_run: {
         run_id: 'old-run',
@@ -83,15 +83,15 @@ describe('stateReducer initialize event', () => {
             total_record_count: 0,
             total_state_count: 0,
           },
-          streams: { customer: { status: 'started', state_count: 2, record_count: 500 } },
+          streams: { customers: { status: 'started', state_count: 2, record_count: 500 } },
         },
       },
     }
-    const state = init(['customer'], 'new-run', prior)
+    const state = init(['customers'], 'new-run', prior)
     expect(state.sync_run.run_id).toBe('new-run')
     expect(state.sync_run.progress.elapsed_ms).toBe(0)
     // Source state is preserved
-    expect(state.source.streams['customer']).toEqual({ cursor: 'cus_99' })
+    expect(state.source.streams['customers']).toEqual({ cursor: 'cus_99' })
   })
 
   it('resets time_ceiling when run_id changes', () => {
@@ -112,12 +112,12 @@ describe('stateReducer initialize event', () => {
             total_record_count: 0,
             total_state_count: 0,
           },
-          streams: { customer: { status: 'started', state_count: 2, record_count: 500 } },
+          streams: { customers: { status: 'started', state_count: 2, record_count: 500 } },
         },
       },
     }
     const before = new Date().toISOString()
-    const state = init(['customer'], 'new-run', prior)
+    const state = init(['customers'], 'new-run', prior)
     const after = new Date().toISOString()
     expect(state.sync_run.time_ceiling).not.toBe('2020-01-01T00:00:00.000Z')
     expect(state.sync_run.time_ceiling! >= before).toBe(true)
@@ -141,20 +141,20 @@ describe('stateReducer initialize event', () => {
             total_record_count: 0,
             total_state_count: 0,
           },
-          streams: { customer: { status: 'started', state_count: 2, record_count: 500 } },
+          streams: { customers: { status: 'started', state_count: 2, record_count: 500 } },
         },
       },
     }
-    const state = init(['customer'], 'same-run', prior)
+    const state = init(['customers'], 'same-run', prior)
     expect(state.sync_run.progress.elapsed_ms).toBe(5000)
-    expect(state.sync_run.progress.streams['customer'].record_count).toBe(500)
+    expect(state.sync_run.progress.streams['customers'].record_count).toBe(500)
   })
 
   it('preserves the prior progress object on continuation', () => {
-    const prior = init(['customer'], 'same-run')
+    const prior = init(['customers'], 'same-run')
     const next = stateReducer(prior, {
       type: 'initialize',
-      stream_names: ['customer'],
+      stream_names: ['customers'],
       run_id: 'same-run',
     })
 
@@ -165,18 +165,18 @@ describe('stateReducer initialize event', () => {
 
 describe('stateReducer message events', () => {
   it('accumulates stream source_state', () => {
-    const state = init(['customer'])
+    const state = init(['customers'])
     const msg: Message = {
       _ts: TS,
       type: 'source_state',
-      source_state: { state_type: 'stream', stream: 'customer', data: { cursor: 'cus_123' } },
+      source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'cus_123' } },
     }
     const next = stateReducer(state, msg)
-    expect(next.source.streams['customer']).toEqual({ cursor: 'cus_123' })
+    expect(next.source.streams['customers']).toEqual({ cursor: 'cus_123' })
   })
 
   it('accumulates global source_state', () => {
-    const state = init(['customer'])
+    const state = init(['customers'])
     const msg: Message = {
       _ts: TS,
       type: 'source_state',
@@ -187,18 +187,18 @@ describe('stateReducer message events', () => {
   })
 
   it('updates progress on record messages', () => {
-    const state = init(['customer'])
+    const state = init(['customers'])
     const msg: Message = {
       _ts: TS,
       type: 'record',
-      record: { stream: 'customer', data: { id: 'cus_1' }, emitted_at: '2024-01-01T00:00:00Z' },
+      record: { stream: 'customers', data: { id: 'cus_1' }, emitted_at: '2024-01-01T00:00:00Z' },
     }
     const next = stateReducer(state, msg)
-    expect(next.sync_run.progress.streams['customer'].record_count).toBe(1)
+    expect(next.sync_run.progress.streams['customers'].record_count).toBe(1)
   })
 
   it('updates progress on source_state messages', () => {
-    const state = init(['customer'])
+    const state = init(['customers'])
     const msg: Message = {
       _ts: TS,
       type: 'source_state',
@@ -209,7 +209,7 @@ describe('stateReducer message events', () => {
   })
 
   it('stores connection_status failure in progress', () => {
-    const state = init(['customer'])
+    const state = init(['customers'])
     const msg: Message = {
       _ts: TS,
       type: 'connection_status',
@@ -223,11 +223,11 @@ describe('stateReducer message events', () => {
   })
 
   it('does not mutate input state', () => {
-    const state = init(['customer'])
+    const state = init(['customers'])
     const msg: Message = {
       _ts: TS,
       type: 'source_state',
-      source_state: { state_type: 'stream', stream: 'customer', data: { cursor: 'x' } },
+      source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'x' } },
     }
     stateReducer(state, msg)
     expect(state.source.streams).toEqual({})

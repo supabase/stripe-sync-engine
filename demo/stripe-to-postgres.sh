@@ -24,13 +24,13 @@ echo "Postgres: $POSTGRES_URL" >&2
 $RUN apps/engine/src/bin/sync-engine.ts sync \
   --stripe-api-key "$STRIPE_API_KEY" \
   --postgres-url "$POSTGRES_URL" \
-  --streams product,price,customer \
+  --streams products,prices,customers \
   --backfill-limit 10
 
 # ── Option B: Full JSON pipeline (equivalent) ────────────────────────────────
 # PIPELINE=$(node -e "console.log(JSON.stringify({
 #   source: { type: 'stripe', stripe: { api_key: process.env.STRIPE_API_KEY, backfill_limit: 10 } },
 #   destination: { type: 'postgres', postgres: { url: '$POSTGRES_URL', schema: 'public', port: 5432, batch_size: 100 } },
-#   streams: [{ name: 'product' }, { name: 'price' }, { name: 'customer' }],
+#   streams: [{ name: 'products' }, { name: 'prices' }, { name: 'customers' }],
 # }))")
 # $RUN apps/engine/src/bin/sync-engine.ts pipeline-sync --xPipeline "$PIPELINE"

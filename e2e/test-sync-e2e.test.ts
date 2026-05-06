@@ -44,7 +44,7 @@ describe('test-server sync via Docker service: 10k customers', () => {
               schema: destSchema,
             },
           },
-          streams: [{ name: 'customer' }],
+          streams: [{ name: 'customers' }],
         }),
       })
       expect(createRes.status).toBe(201)
@@ -57,7 +57,7 @@ describe('test-server sync via Docker service: 10k customers', () => {
         async () => {
           try {
             const r = await harness.destPool.query(
-              `SELECT count(*)::int AS n FROM "${destSchema}"."customer"`
+              `SELECT count(*)::int AS n FROM "${destSchema}"."customers"`
             )
             return r.rows[0].n === harness.expectedIds.length
           } catch {
@@ -68,7 +68,7 @@ describe('test-server sync via Docker service: 10k customers', () => {
       )
 
       const { rows } = await harness.destPool.query(
-        `SELECT id FROM "${destSchema}"."customer" ORDER BY id`
+        `SELECT id FROM "${destSchema}"."customers" ORDER BY id`
       )
       const destIds = new Set(rows.map((r: { id: string }) => r.id))
       expect(destIds.size).toBe(harness.expectedIds.length)

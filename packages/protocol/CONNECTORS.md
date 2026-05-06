@@ -267,7 +267,7 @@ source-stripe discover --config '{"api_key":"sk_test_..."}'
 # read (--config + --catalog, optional --state)
 source-stripe read \
   --config '{"api_key":"sk_test_...","base_url":"http://localhost:12111"}' \
-  --catalog '{"streams":[{"stream":{"name":"customer","primary_key":[["id"]]},"sync_mode":"full_refresh","destination_sync_mode":"append"}]}'
+  --catalog '{"streams":[{"stream":{"name":"customers","primary_key":[["id"]]},"sync_mode":"full_refresh","destination_sync_mode":"append"}]}'
 
 # write (--config + --catalog, messages from stdin pipe)
 source-stripe read --config '...' --catalog '...' \

@@ -13,7 +13,7 @@ Discovers streams, builds the catalog, runs
 sync-engine sync --stripe-api-key sk_test_... --postgres-url postgres://localhost/mydb
 
 # Filter streams
-sync-engine sync --stripe-api-key sk_test_... --postgres-url postgres://... --streams customer,invoice
+sync-engine sync --stripe-api-key sk_test_... --postgres-url postgres://... --streams customers,invoices
 
 # From a JSON config file (SyncParams shape)
 sync-engine sync --config sync.json
@@ -93,7 +93,7 @@ source-stripe discover --config '{"api_key":"sk_test_..."}'
 # Read records (requires --config and --catalog)
 source-stripe read \
   --config '{"api_key":"sk_test_..."}' \
-  --catalog '{"streams":[{"stream":{"name":"customer","primary_key":[["id"]]},"sync_mode":"full_refresh","destination_sync_mode":"append"}]}'
+  --catalog '{"streams":[{"stream":{"name":"customers","primary_key":[["id"]]},"sync_mode":"full_refresh","destination_sync_mode":"append"}]}'
 ```
 
 ### Destination commands
@@ -119,7 +119,7 @@ source-stripe read --config '...' --catalog '...' \
 
 # Filter to one stream in a multi-stream read
 source-stripe read --config '...' --catalog '...' \
-  | jq -c 'select(.stream == "customer")'
+  | jq -c 'select(.stream == "customers")'
 
 # Compact summary per message
 source-stripe read --config '...' --catalog '...' \
@@ -140,7 +140,7 @@ For `--config sync.json`:
     "name": "postgres",
     "connection_string": "postgres://localhost/mydb"
   },
-  "streams": [{ "name": "customer", "sync_mode": "incremental" }, { "name": "invoice" }]
+  "streams": [{ "name": "customers", "sync_mode": "incremental" }, { "name": "invoices" }]
 }
 ```
 

@@ -188,7 +188,7 @@ function buildTableSql(schema: string, table: ParsedResourceTable): string {
 
   const cols: string[] = [
     '"_raw_data" jsonb NOT NULL',
-    '"_synced_at" timestamptz NOT NULL DEFAULT now()',
+    '"_last_synced_at" timestamptz',
     '"_updated_at" timestamptz NOT NULL DEFAULT now()',
     '"_account_id" text NOT NULL',
     `"id" text GENERATED ALWAYS AS ((_raw_data->>'id')::text) STORED`,

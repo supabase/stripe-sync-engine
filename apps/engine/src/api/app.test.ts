@@ -61,7 +61,7 @@ const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined
 const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
 const testPipeline = {
-  source: { type: 'test', test: { streams: { customer: {} } } },
+  source: { type: 'test', test: { streams: { customers: {} } } },
   destination: { type: 'test', test: {} },
 }
 
@@ -352,14 +352,16 @@ describe('engine request id header', () => {
         yield {
           type: 'catalog' as const,
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         }
       },
       async *read() {
-        bridgeLogger.info({ stream: 'customer' }, 'connector logger message')
+        bridgeLogger.info({ stream: 'customers' }, 'connector logger message')
         yield bridgeMsg.record({
-          stream: 'customer',
+          stream: 'customers',
           data: { id: 'cus_bridge' },
           emitted_at: new Date().toISOString(),
         })
@@ -424,7 +426,7 @@ describe('engine request id header', () => {
         message: 'connector logger message',
         data: {
           name: 'bridge-source',
-          stream: 'customer',
+          stream: 'customers',
         },
       },
     })
@@ -466,7 +468,9 @@ describe('engine request id header', () => {
         yield {
           type: 'catalog' as const,
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         }
       },
@@ -477,7 +481,7 @@ describe('engine request id header', () => {
         await bothReadsStarted
         bridgeLogger.info('after barrier')
         yield bridgeMsg.record({
-          stream: 'customer',
+          stream: 'customers',
           data: { id: `cus_${readCount}` },
           emitted_at: new Date().toISOString(),
         })
@@ -616,12 +620,12 @@ describe('POST /read', () => {
       {
         type: 'record',
         record: {
-          stream: 'customer',
+          stream: 'customers',
           data: { id: 'cus_1', name: 'Alice' },
           emitted_at: new Date().toISOString(),
         },
       },
-      { type: 'source_state', source_state: { stream: 'customer', data: { status: 'complete' } } },
+      { type: 'source_state', source_state: { stream: 'customers', data: { status: 'complete' } } },
     ]
     const res = await app.request('/pipeline_read', jsonBody({ pipeline: testPipeline, stdin }))
 
@@ -642,14 +646,14 @@ describe('POST /read', () => {
     const record = {
       type: 'record',
       record: {
-        stream: 'customer',
+        stream: 'customers',
         data: { id: 'cus_wrapped' },
         emitted_at: new Date().toISOString(),
       },
     }
     const state = {
       type: 'source_state',
-      source_state: { stream: 'customer', data: { cursor: '1' } },
+      source_state: { stream: 'customers', data: { cursor: '1' } },
     }
 
     const res = await app.request(
@@ -681,7 +685,7 @@ describe('POST /write', () => {
       {
         type: 'record',
         record: {
-          stream: 'customer',
+          stream: 'customers',
           data: { id: 'cus_1' },
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
@@ -689,7 +693,7 @@ describe('POST /write', () => {
       {
         type: 'source_state',
         source_state: {
-          stream: 'customer',
+          stream: 'customers',
           data: { cursor: 'cus_1' },
         },
       },
@@ -709,7 +713,7 @@ describe('POST /write', () => {
     const events = await readNdjson<Message>(res)
     const stateEvents = events.filter((e) => e.type === 'source_state') as SourceStateMessage[]
     expect(stateEvents).toHaveLength(1)
-    expect(stateEvents[0]!.source_state.stream).toBe('customer')
+    expect(stateEvents[0]!.source_state.stream).toBe('customers')
   })
 
   it('returns 400 when body is missing', async () => {
@@ -728,12 +732,12 @@ describe('POST /sync', () => {
       {
         type: 'record',
         record: {
-          stream: 'customer',
+          stream: 'customers',
           data: { id: 'cus_1', name: 'Alice' },
           emitted_at: new Date().toISOString(),
         },
       },
-      { type: 'source_state', source_state: { stream: 'customer', data: { status: 'complete' } } },
+      { type: 'source_state', source_state: { stream: 'customers', data: { status: 'complete' } } },
     ]
     const res = await app.request('/pipeline_sync', jsonBody({ pipeline: testPipeline, stdin }))
 
@@ -753,14 +757,14 @@ describe('POST /sync', () => {
     const record = {
       type: 'record',
       record: {
-        stream: 'customer',
+        stream: 'customers',
         data: { id: 'cus_wrapped' },
         emitted_at: new Date().toISOString(),
       },
     }
     const state = {
       type: 'source_state',
-      source_state: { stream: 'customer', data: { cursor: '1' } },
+      source_state: { stream: 'customers', data: { cursor: '1' } },
     }
 
     const res = await app.request(
@@ -796,12 +800,12 @@ describe('time_limit and run_id', () => {
       {
         type: 'record',
         record: {
-          stream: 'customer',
+          stream: 'customers',
           data: { id: 'cus_1' },
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
       },
-      { type: 'source_state', source_state: { stream: 'customer', data: { cursor: '1' } } },
+      { type: 'source_state', source_state: { stream: 'customers', data: { cursor: '1' } } },
     ]
     const res = await app.request(
       '/pipeline_sync',
@@ -828,21 +832,21 @@ describe('time_limit and run_id', () => {
       {
         type: 'record',
         record: {
-          stream: 'customer',
+          stream: 'customers',
           data: { id: 'cus_1' },
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
       },
-      { type: 'source_state', source_state: { stream: 'customer', data: { cursor: '1' } } },
+      { type: 'source_state', source_state: { stream: 'customers', data: { cursor: '1' } } },
       {
         type: 'record',
         record: {
-          stream: 'customer',
+          stream: 'customers',
           data: { id: 'cus_2' },
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
       },
-      { type: 'source_state', source_state: { stream: 'customer', data: { cursor: '2' } } },
+      { type: 'source_state', source_state: { stream: 'customers', data: { cursor: '2' } } },
     ]
     const res = await app.request('/pipeline_read', jsonBody({ pipeline: testPipeline, stdin }))
 
@@ -881,7 +885,7 @@ describe('POST /source_discover', () => {
     const res = await app.request(
       '/source_discover',
       jsonBody({
-        source: { type: 'test', test: { streams: { customer: {}, product: {} } } },
+        source: { type: 'test', test: { streams: { customers: {}, products: {} } } },
       })
     )
 
@@ -892,8 +896,8 @@ describe('POST /source_discover', () => {
     expect(catalogs).toHaveLength(1)
     const catalog = (catalogs[0] as any).catalog
     const streamNames = catalog.streams.map((s: any) => s.name)
-    expect(streamNames).toContain('customer')
-    expect(streamNames).toContain('product')
+    expect(streamNames).toContain('customers')
+    expect(streamNames).toContain('products')
   })
 
   it('returns 500 when discover throws', async () => {

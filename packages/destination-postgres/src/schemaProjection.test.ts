@@ -33,31 +33,9 @@ describe('jsonSchemaToColumns', () => {
 
     expect(byName.created.pgType).toBe('bigint')
     expect(byName.metadata.pgType).toBe('jsonb')
-    expect(byName.expires_at.pgType).toBe('text')
-    expect(byName.expires_at.expression).toBe("(_raw_data->>'expires_at')::text")
+    expect(byName.expires_at.pgType).toBe('text') // date-time → text for safety
+    // `deleted` is intentionally filtered out — tombstones are consumed by deleteMany
     expect(byName.deleted).toBeUndefined()
-  })
-
-  it('unwraps nullable oneOf wrappers when picking column types', () => {
-    const columns = jsonSchemaToColumns({
-      type: 'object',
-      properties: {
-        id: { type: 'string' },
-        nullable_ts: {
-          oneOf: [{ type: 'string', format: 'date-time' }, { type: 'null' }],
-        },
-        nullable_meta: {
-          oneOf: [{ type: 'object' }, { type: 'null' }],
-        },
-        nullable_count: {
-          oneOf: [{ type: 'null' }, { type: 'integer' }],
-        },
-      },
-    })
-    const byName = Object.fromEntries(columns.map((c) => [c.name, c]))
-    expect(byName.nullable_ts.pgType).toBe('text')
-    expect(byName.nullable_meta.pgType).toBe('jsonb')
-    expect(byName.nullable_count.pgType).toBe('bigint')
   })
 
   it('skips the id column (generated separately)', () => {
@@ -73,12 +51,11 @@ describe('jsonSchemaToColumns', () => {
     expect(customerCol.expression).toContain("->>'id'")
   })
 
-  it('skips system timestamp columns', () => {
+  it('skips _updated_at (kept as a legacy hardcoded timestamptz column, not generated)', () => {
     const schema = {
       type: 'object',
-      properties: { _synced_at: { type: 'string' }, _updated_at: { type: 'integer' } },
+      properties: { _updated_at: { type: 'integer' } },
     }
-    expect(jsonSchemaToColumns(schema).find((c) => c.name === '_synced_at')).toBeUndefined()
     expect(jsonSchemaToColumns(schema).find((c) => c.name === '_updated_at')).toBeUndefined()
   })
 })
@@ -111,7 +88,6 @@ describe('buildCreateTableWithSchema', () => {
     // No indexes by default (no system_columns with index: true)
     expect(stmts.some((s) => s.includes('CREATE INDEX'))).toBe(false)
 
-    expect(stmts[0]).toContain('"_synced_at" timestamptz NOT NULL DEFAULT now()')
     // _updated_at keeps its legacy timestamptz shape so existing
     // deployments don't need a column migration. upsertMany writes the
     // source-stamped value explicitly per row (DDR-009); the legacy
@@ -123,7 +99,7 @@ describe('buildCreateTableWithSchema', () => {
   })
 
   it('adds system columns and indexes when system_columns is provided', () => {
-    const stmts = buildCreateTableWithSchema('stripe', 'customer', SAMPLE_JSON_SCHEMA, {
+    const stmts = buildCreateTableWithSchema('stripe', 'customers', SAMPLE_JSON_SCHEMA, {
       system_columns: [{ name: '_account_id', type: 'text', index: true }],
     })
 
@@ -153,13 +129,13 @@ describe('buildCreateTableWithSchema', () => {
   })
 
   it('handles expandable reference columns', () => {
-    const stmts = buildCreateTableWithSchema('mydata', 'charge', EXPANDABLE_REF_SCHEMA)
+    const stmts = buildCreateTableWithSchema('mydata', 'charges', EXPANDABLE_REF_SCHEMA)
     expect(stmts[0]).toContain('"customer" text GENERATED ALWAYS AS (CASE')
     expect(stmts[0]).toContain("WHEN jsonb_typeof(_raw_data->'customer') = 'object'")
   })
 
   it('generates composite primary key with _account_id when primary_key option is set', () => {
-    const stmts = buildCreateTableWithSchema('stripe', 'customer', SAMPLE_JSON_SCHEMA, {
+    const stmts = buildCreateTableWithSchema('stripe', 'customers', SAMPLE_JSON_SCHEMA, {
       primary_key: [['id'], ['_account_id']],
     })
 
@@ -177,8 +153,8 @@ describe('buildCreateTableWithSchema', () => {
   })
 
   it('produces stable output across repeated calls', () => {
-    const first = buildCreateTableWithSchema('mydata', 'customer', SAMPLE_JSON_SCHEMA)
-    const second = buildCreateTableWithSchema('mydata', 'customer', SAMPLE_JSON_SCHEMA)
+    const first = buildCreateTableWithSchema('mydata', 'customers', SAMPLE_JSON_SCHEMA)
+    const second = buildCreateTableWithSchema('mydata', 'customers', SAMPLE_JSON_SCHEMA)
     expect(second).toEqual(first)
   })
 
@@ -194,7 +170,7 @@ describe('buildCreateTableWithSchema', () => {
         _updated_at: { type: 'integer' },
       },
     }
-    const stmts = buildCreateTableWithSchema('stripe', 'customer', schemaWithUpdatedAt)
+    const stmts = buildCreateTableWithSchema('stripe', 'customers', schemaWithUpdatedAt)
 
     expect(stmts[0]).toContain('"_updated_at" timestamptz NOT NULL DEFAULT now()')
     expect(stmts[0]).not.toContain('"_updated_at" bigint')
@@ -212,7 +188,7 @@ describe('buildCreateTableDDL', () => {
   it('buildCreateTableDDL emits CHECK with IN list for any column with enum in JSON Schema', () => {
     const ddl = buildCreateTableDDL(
       'stripe',
-      'charge',
+      'charges',
       {
         properties: {
           id: { type: 'string' },
@@ -232,7 +208,7 @@ describe('buildCreateTableDDL', () => {
   })
 
   it('buildCreateTableDDL emits CHECK for non-account enum columns too', () => {
-    const ddl = buildCreateTableDDL('stripe', 'event', {
+    const ddl = buildCreateTableDDL('stripe', 'events', {
       properties: {
         id: { type: 'string' },
         status: { type: 'string', enum: ['active', 'paused', 'cancelled'] },
@@ -246,7 +222,7 @@ describe('buildCreateTableDDL', () => {
   })
 
   it('buildCreateTableDDL skips CHECK when no enum is present in JSON Schema', () => {
-    const ddl = buildCreateTableDDL('stripe', 'charge', SAMPLE_JSON_SCHEMA, {
+    const ddl = buildCreateTableDDL('stripe', 'charges', SAMPLE_JSON_SCHEMA, {
       primary_key: [['id'], ['_account_id']],
     })
     expect(ddl).toContain('"_account_id" text GENERATED ALWAYS AS')
@@ -268,14 +244,13 @@ describe('buildCreateTableDDL', () => {
     expect(ddl).toContain('ADD COLUMN IF NOT EXISTS "expires_at"')
     expect(ddl).not.toContain('"deleted"')
 
-    expect(ddl).toContain('"_synced_at" timestamptz NOT NULL DEFAULT now()')
     expect(ddl).toContain('"_updated_at" timestamptz NOT NULL DEFAULT now()')
     expect(ddl).toContain('DROP TRIGGER IF EXISTS handle_updated_at')
     expect(ddl).not.toContain('CREATE TRIGGER handle_updated_at')
   })
 
   it('wraps every DDL statement in exception handlers', () => {
-    const ddl = buildCreateTableDDL('stripe', 'customer', SAMPLE_JSON_SCHEMA, {
+    const ddl = buildCreateTableDDL('stripe', 'customers', SAMPLE_JSON_SCHEMA, {
       system_columns: [{ name: '_account_id', type: 'text', index: true }],
     })
 
@@ -318,8 +293,8 @@ describe('buildCreateTableDDL', () => {
   })
 
   it('produces stable output across repeated calls', () => {
-    const first = buildCreateTableDDL('mydata', 'customer', SAMPLE_JSON_SCHEMA)
-    const second = buildCreateTableDDL('mydata', 'customer', SAMPLE_JSON_SCHEMA)
+    const first = buildCreateTableDDL('mydata', 'customers', SAMPLE_JSON_SCHEMA)
+    const second = buildCreateTableDDL('mydata', 'customers', SAMPLE_JSON_SCHEMA)
     expect(second).toEqual(first)
   })
 })

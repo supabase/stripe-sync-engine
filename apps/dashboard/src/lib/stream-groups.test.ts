@@ -8,28 +8,28 @@ function stream(name: string): CatalogStream {
 describe('groupStreams', () => {
   it('groups payment-related streams together', () => {
     const streams = [
-      stream('payment_intent'),
-      stream('payment_method'),
-      stream('charge'),
-      stream('refund'),
+      stream('payment_intents'),
+      stream('payment_methods'),
+      stream('charges'),
+      stream('refunds'),
     ]
     const groups = groupStreams(streams)
     const payments = groups.find((g) => g.name === 'Payments')
     expect(payments).toBeDefined()
     expect(payments!.streams.map((s) => s.name)).toEqual(
-      expect.arrayContaining(['payment_intent', 'payment_method', 'charge', 'refund'])
+      expect.arrayContaining(['payment_intents', 'payment_methods', 'charges', 'refunds'])
     )
   })
 
   it('groups billing-related streams together', () => {
     const streams = [
-      stream('subscription'),
-      stream('subscription_schedule'),
-      stream('invoice'),
-      stream('price'),
-      stream('plan'),
-      stream('coupon'),
-      stream('credit_note'),
+      stream('subscriptions'),
+      stream('subscription_schedules'),
+      stream('invoices'),
+      stream('prices'),
+      stream('plans'),
+      stream('coupons'),
+      stream('credit_notes'),
     ]
     const groups = groupStreams(streams)
     const billing = groups.find((g) => g.name === 'Billing')
@@ -38,17 +38,17 @@ describe('groupStreams', () => {
   })
 
   it('sorts groups alphabetically', () => {
-    const streams = [stream('product'), stream('customer'), stream('charge')]
+    const streams = [stream('products'), stream('customers'), stream('charges')]
     const groups = groupStreams(streams)
     const names = groups.map((g) => g.name)
     expect(names).toEqual([...names].sort())
   })
 
   it('sorts streams within a group alphabetically', () => {
-    const streams = [stream('refund'), stream('charge'), stream('dispute')]
+    const streams = [stream('refunds'), stream('charges'), stream('disputes')]
     const groups = groupStreams(streams)
     const payments = groups.find((g) => g.name === 'Payments')!
-    expect(payments.streams.map((s) => s.name)).toEqual(['charge', 'dispute', 'refund'])
+    expect(payments.streams.map((s) => s.name)).toEqual(['charges', 'disputes', 'refunds'])
   })
 
   it('handles dotted names (v2 resources)', () => {
@@ -64,14 +64,17 @@ describe('groupStreams', () => {
 })
 
 describe('filterStreams', () => {
-  const streams = [stream('customer'), stream('charge'), stream('checkout_session')]
+  const streams = [stream('customers'), stream('charges'), stream('checkout_sessions')]
 
   it('filters by partial name match', () => {
-    expect(filterStreams(streams, 'ch').map((s) => s.name)).toEqual(['charge', 'checkout_session'])
+    expect(filterStreams(streams, 'ch').map((s) => s.name)).toEqual([
+      'charges',
+      'checkout_sessions',
+    ])
   })
 
   it('is case-insensitive', () => {
-    expect(filterStreams(streams, 'CUSTOMER').map((s) => s.name)).toEqual(['customer'])
+    expect(filterStreams(streams, 'CUSTOMER').map((s) => s.name)).toEqual(['customers'])
   })
 
   it('returns all streams for empty query', () => {

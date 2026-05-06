@@ -58,6 +58,5 @@ apps/visualizer/out/
 
 # Reconcile / verification output
 tmp/
-.tmp/
 prev-run.txt
 verify-*.json

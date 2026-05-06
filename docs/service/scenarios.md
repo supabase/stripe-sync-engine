@@ -49,16 +49,16 @@ POST /syncs        { source: { type: "stripe", credential_id: "cred_stripe_..." 
                      destination: { type: "postgres", schema_name: "stripe", credential_id: "cred_pg_..." } }
 ```
 
-| Test                                                                                          | Validates        |
-| --------------------------------------------------------------------------------------------- | ---------------- |
-| Sync status starts as `backfilling`                                                           | Initial state    |
-| Sync transitions to `syncing` after backfill completes                                        | Lifecycle        |
-| `GET /syncs/:id` returns current status + state                                               | Retrieval        |
-| `PATCH /syncs/:id` with `status: "paused"` pauses the sync                                    | Pause            |
-| `PATCH /syncs/:id` with `status: "syncing"` resumes from checkpoint                           | Resume           |
-| `DELETE /syncs/:id` stops the pipeline and cleans up                                          | Deletion         |
-| Sync with `streams: [{ name: "customer" }, { name: "invoice" }]` only syncs those streams     | Stream selection |
-| Sync with `streams: [{ name: "charge", skip_backfill: true }]` skips backfill for that stream | Skip backfill    |
+| Test                                                                                           | Validates        |
+| ---------------------------------------------------------------------------------------------- | ---------------- |
+| Sync status starts as `backfilling`                                                            | Initial state    |
+| Sync transitions to `syncing` after backfill completes                                         | Lifecycle        |
+| `GET /syncs/:id` returns current status + state                                                | Retrieval        |
+| `PATCH /syncs/:id` with `status: "paused"` pauses the sync                                     | Pause            |
+| `PATCH /syncs/:id` with `status: "syncing"` resumes from checkpoint                            | Resume           |
+| `DELETE /syncs/:id` stops the pipeline and cleans up                                           | Deletion         |
+| Sync with `streams: [{ name: "customers" }, { name: "invoices" }]` only syncs those streams    | Stream selection |
+| Sync with `streams: [{ name: "charges", skip_backfill: true }]` skips backfill for that stream | Skip backfill    |
 
 ### Stripe → Google Sheets
 

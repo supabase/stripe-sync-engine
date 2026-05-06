@@ -18,19 +18,22 @@ import {
 import { createMemorySheets } from '../__tests__/memory-sheets.js'
 
 /**
- * Strip metadata timestamp columns from a 2D rows array.
+ * Strip the source-provided `_updated_at` column from a 2D rows array.
  *
- * The destination stamps `_synced_at`; the source may stamp `_updated_at`.
- * Most tests only care about source data, so drop both at assertion sites.
+ * The source stamps every record with `_updated_at` (unix seconds, from
+ * `event.created` for webhooks or the HTTP `Date` header for backfill);
+ * the destination passes the value through verbatim. Most tests don't
+ * care about its exact value and just want to assert on source data;
+ * use this helper at the assertion site to drop the column before
+ * comparing. Tests that exercise the column itself stay in the
+ * `_updated_at column` describe block at the bottom of this file.
  */
 function stripUpdatedAt(rows: unknown[][] | undefined): unknown[][] {
   if (!rows || rows.length === 0) return rows ?? []
   const header = rows[0] as unknown[]
-  const indexes = new Set(
-    ['_updated_at', '_synced_at'].map((name) => header.indexOf(name)).filter((idx) => idx >= 0)
-  )
-  if (indexes.size === 0) return rows
-  return rows.map((row) => row.filter((_, i) => !indexes.has(i)))
+  const idx = header.indexOf('_updated_at')
+  if (idx < 0) return rows
+  return rows.map((row) => row.filter((_, i) => i !== idx))
 }
 
 /** Collect all output from the destination's write() generator. */
@@ -229,21 +232,21 @@ describe('destination-google-sheets', () => {
     const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
-      record('customer', { id: 'c1', name: 'Alice' }),
-      record('invoice', { id: 'inv_1', amount: 100, customer: 'c1' }),
-      record('customer', { id: 'c2', name: 'Bob' }),
-      record('invoice', { id: 'inv_2', amount: 200, customer: 'c2' }),
+      record('customers', { id: 'c1', name: 'Alice' }),
+      record('invoices', { id: 'inv_1', amount: 100, customer: 'c1' }),
+      record('customers', { id: 'c2', name: 'Bob' }),
+      record('invoices', { id: 'inv_2', amount: 200, customer: 'c2' }),
     ]
 
     await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
     const id = getSpreadsheetIds()[0]
 
-    const customerRows = stripUpdatedAt(getData(id, 'customer')!)
+    const customerRows = stripUpdatedAt(getData(id, 'customers')!)
     expect(customerRows[0]).toEqual(['id', 'name'])
     expect(customerRows).toHaveLength(3) // header + 2
 
-    const invoiceRows = stripUpdatedAt(getData(id, 'invoice')!)
+    const invoiceRows = stripUpdatedAt(getData(id, 'invoices')!)
     expect(invoiceRows[0]).toEqual(['id', 'amount', 'customer'])
     expect(invoiceRows).toHaveLength(3) // header + 2
   })
@@ -343,15 +346,15 @@ describe('destination-google-sheets', () => {
     const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
-      record('event', { id: 'e1' }),
-      record('event', { id: 'e2' }),
+      record('events', { id: 'e1' }),
+      record('events', { id: 'e2' }),
       // batch_size=100, so these won't trigger a mid-stream flush
     ]
 
     await collect(dest.write({ config: cfg({ batch_size: 100 }), catalog }, toAsyncIter(messages)))
 
     const id = getSpreadsheetIds()[0]
-    const rows = stripUpdatedAt(getData(id, 'event')!)
+    const rows = stripUpdatedAt(getData(id, 'events')!)
     expect(rows).toHaveLength(3) // header + 2 rows
   })
 
@@ -451,7 +454,7 @@ describe('check', () => {
       streams: [
         {
           stream: {
-            name: 'customer',
+            name: 'customers',
             primary_key: [['id']],
             newer_than_field: '_updated_at',
             json_schema: {
@@ -472,7 +475,7 @@ describe('check', () => {
       dest.write(
         { config: cfg(), catalog: configuredCatalog },
         toAsyncIter([
-          record('customer', {
+          record('customers', {
             id: 'cus_1',
             name: 'Alice',
             [ROW_KEY_FIELD]: '["cus_1"]',
@@ -488,13 +491,13 @@ describe('check', () => {
           catalog: configuredCatalog,
         },
         toAsyncIter([
-          record('customer', {
+          record('customers', {
             id: 'cus_1',
             name: 'Alice Updated',
             [ROW_KEY_FIELD]: '["cus_1"]',
             [ROW_NUMBER_FIELD]: 2,
           }),
-          record('customer', {
+          record('customers', {
             id: 'cus_2',
             name: 'Bob',
             [ROW_KEY_FIELD]: '["cus_2"]',
@@ -503,7 +506,7 @@ describe('check', () => {
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice Updated'],
@@ -517,7 +520,7 @@ describe('check', () => {
     const meta = parseGoogleSheetsMetaLog((metaLog as { log: { message: string } }).log.message)
     expect(meta).toEqual({
       type: 'row_assignments',
-      assignments: { customer: { '["cus_2"]': 3 } },
+      assignments: { customers: { '["cus_2"]': 3 } },
     })
   })
 
@@ -528,7 +531,7 @@ describe('check', () => {
     await collect(
       dest.write(
         { config: cfg(), catalog },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice' })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice' })])
       )
     )
 
@@ -536,7 +539,7 @@ describe('check', () => {
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog },
         toAsyncIter([
-          record('customer', {
+          record('customers', {
             id: 'cus_2',
             name: 'Bob',
             email: 'bob@test.invalid',
@@ -545,7 +548,7 @@ describe('check', () => {
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows[0]).toEqual(['id', 'name', 'email'])
     expect(rows[1]).toEqual(['cus_1', 'Alice'])
     expect(rows[2]).toEqual(['cus_2', 'Bob', 'bob@test.invalid'])
@@ -557,7 +560,7 @@ describe('native upsert', () => {
     streams: [
       {
         stream: {
-          name: 'customer',
+          name: 'customers',
           primary_key: primaryKey,
           newer_than_field: '_updated_at',
           json_schema: {
@@ -580,7 +583,7 @@ describe('native upsert', () => {
     await collect(
       dest.write(
         { config: cfg(), catalog: cat },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice' })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice' })])
       )
     )
 
@@ -588,11 +591,11 @@ describe('native upsert', () => {
     await collect(
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice Updated' })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice Updated' })])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice Updated'],
@@ -607,18 +610,18 @@ describe('native upsert', () => {
     await collect(
       dest.write(
         { config: cfg(), catalog: cat },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice' })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice' })])
       )
     )
 
     await collect(
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
-        toAsyncIter([record('customer', { id: 'cus_2', name: 'Bob' })])
+        toAsyncIter([record('customers', { id: 'cus_2', name: 'Bob' })])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice'],
@@ -636,13 +639,13 @@ describe('native upsert', () => {
       dest.write(
         { config: cfg({ batch_size: 1 }), catalog: cat },
         toAsyncIter([
-          record('customer', { id: 'cus_1', name: 'Alice', _updated_at: 1 }),
-          record('customer', { id: 'cus_1', name: 'Alice Updated', _updated_at: 2 }),
+          record('customers', { id: 'cus_1', name: 'Alice', _updated_at: 1 }),
+          record('customers', { id: 'cus_1', name: 'Alice Updated', _updated_at: 2 }),
         ])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice Updated'],
@@ -659,13 +662,13 @@ describe('native upsert', () => {
       dest.write(
         { config: cfg(), catalog: cat },
         toAsyncIter([
-          record('customer', { id: 'cus_1', name: 'Alice', _updated_at: 1 }),
-          record('customer', { id: 'cus_1', name: 'Alice Updated', _updated_at: 2 }),
+          record('customers', { id: 'cus_1', name: 'Alice', _updated_at: 1 }),
+          record('customers', { id: 'cus_1', name: 'Alice Updated', _updated_at: 2 }),
         ])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice Updated'],
@@ -681,7 +684,7 @@ describe('native upsert', () => {
     await collect(
       dest1.write(
         { config: cfg(), catalog: cat },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice' })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice' })])
       )
     )
 
@@ -692,11 +695,11 @@ describe('native upsert', () => {
     await collect(
       dest2.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice Updated' })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice Updated' })])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice Updated'],
@@ -712,13 +715,13 @@ describe('native upsert', () => {
       collect(
         dest.write(
           { config: cfg({ spreadsheet_title: 'Pipeline A' }), catalog: cat },
-          toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice' })])
+          toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice' })])
         )
       ),
       collect(
         dest.write(
           { config: cfg({ spreadsheet_title: 'Pipeline B' }), catalog: cat },
-          toAsyncIter([record('customer', { id: 'cus_2', name: 'Bob' })])
+          toAsyncIter([record('customers', { id: 'cus_2', name: 'Bob' })])
         )
       ),
     ])
@@ -727,8 +730,8 @@ describe('native upsert', () => {
     expect(ids).toHaveLength(2)
     expect(ids[0]).not.toBe(ids[1])
 
-    const rowsA = stripUpdatedAt(getData(ids[0], 'customer')!)
-    const rowsB = stripUpdatedAt(getData(ids[1], 'customer')!)
+    const rowsA = stripUpdatedAt(getData(ids[0], 'customers')!)
+    const rowsB = stripUpdatedAt(getData(ids[1], 'customers')!)
     expect(rowsA).toHaveLength(2)
     expect(rowsB).toHaveLength(2)
 
@@ -754,8 +757,8 @@ describe('native upsert', () => {
       dest.write(
         { config: cfg(), catalog: cat },
         toAsyncIter([
-          record('customer', { id: 'cus_1', name: 'Alice' }),
-          record('customer', { id: 'cus_2', name: 'Bob' }),
+          record('customers', { id: 'cus_1', name: 'Alice' }),
+          record('customers', { id: 'cus_2', name: 'Bob' }),
         ])
       )
     )
@@ -765,7 +768,7 @@ describe('native upsert', () => {
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
         toAsyncIter([
-          record('customer', {
+          record('customers', {
             id: 'cus_1',
             name: 'Alice Overwrite',
             [ROW_NUMBER_FIELD]: 3,
@@ -774,7 +777,7 @@ describe('native upsert', () => {
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice'],
@@ -791,13 +794,13 @@ describe('native upsert', () => {
       dest.write(
         { config: cfg(), catalog: cat },
         toAsyncIter([
-          record('customer', { id: 'cus_1', name: 'Alice' }),
-          record('customer', { id: 'cus_1', name: 'Alice Again' }),
+          record('customers', { id: 'cus_1', name: 'Alice' }),
+          record('customers', { id: 'cus_1', name: 'Alice Again' }),
         ])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice'],
@@ -815,12 +818,12 @@ describe('native upsert', () => {
       dest.write(
         { config: cfg(), catalog: cat },
         toAsyncIter([
-          record('customer', { name: 'Alice', email: 'alice@test.invalid', id: 'cus_1' }),
+          record('customers', { name: 'Alice', email: 'alice@test.invalid', id: 'cus_1' }),
         ])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     // id should be first column despite being last in the record
     expect(rows[0]).toEqual(['id', 'name', 'email'])
   })
@@ -831,7 +834,7 @@ describe('delete handling', () => {
     streams: [
       {
         stream: {
-          name: 'customer',
+          name: 'customers',
           primary_key: primaryKey,
           newer_than_field: '_updated_at',
           json_schema: {
@@ -865,7 +868,7 @@ describe('delete handling', () => {
     await collect(
       dest.write(
         { config: cfg(), catalog: cat },
-        toAsyncIter(names.map(([id, name]) => record('customer', { id, name })))
+        toAsyncIter(names.map(([id, name]) => record('customers', { id, name })))
       )
     )
   }
@@ -898,11 +901,11 @@ describe('delete handling', () => {
     await collect(
       dest.write(
         { config: cfg(), catalog: cat },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice', deleted: true })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice', deleted: true })])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([['id', 'name', 'deleted']])
   })
 
@@ -914,11 +917,11 @@ describe('delete handling', () => {
     await collect(
       dest.write(
         { config: cfg(), catalog: cat },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice', deleted: false })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice', deleted: false })])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_1', 'Alice', 'false'],
@@ -941,11 +944,11 @@ describe('delete handling', () => {
     await collect(
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
-        toAsyncIter([record('customer', { id: 'cus_2', name: 'Bob', deleted: true })])
+        toAsyncIter([record('customers', { id: 'cus_2', name: 'Bob', deleted: true })])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     // Seeded rows are 2-wide; blank rows written by delete compaction are
     // 3-wide because the header was extended on the delete record's arrival.
     expect(rows).toEqual([
@@ -970,11 +973,11 @@ describe('delete handling', () => {
     await collect(
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
-        toAsyncIter([record('customer', { id: 'cus_3', name: 'Charlie', deleted: true })])
+        toAsyncIter([record('customers', { id: 'cus_3', name: 'Charlie', deleted: true })])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_1', 'Alice'],
@@ -1002,13 +1005,13 @@ describe('delete handling', () => {
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
         toAsyncIter([
-          record('customer', { id: 'cus_a', name: 'Alice', deleted: true }),
-          record('customer', { id: 'cus_b', name: 'Bob', deleted: true }),
+          record('customers', { id: 'cus_a', name: 'Alice', deleted: true }),
+          record('customers', { id: 'cus_b', name: 'Bob', deleted: true }),
         ])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_d', 'Dave'], // was cus_a; donor (row 5)
@@ -1037,13 +1040,13 @@ describe('delete handling', () => {
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
         toAsyncIter([
-          record('customer', { id: 'cus_b', name: 'Bob', deleted: true }),
-          record('customer', { id: 'cus_d', name: 'Dave', deleted: true }),
+          record('customers', { id: 'cus_b', name: 'Bob', deleted: true }),
+          record('customers', { id: 'cus_d', name: 'Dave', deleted: true }),
         ])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_a', 'Alice'],
@@ -1068,14 +1071,14 @@ describe('delete handling', () => {
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
         toAsyncIter([
-          record('customer', { id: 'cus_1', name: 'Alice', deleted: true }),
-          record('customer', { id: 'cus_2', name: 'Bob', deleted: true }),
-          record('customer', { id: 'cus_3', name: 'Charlie', deleted: true }),
+          record('customers', { id: 'cus_1', name: 'Alice', deleted: true }),
+          record('customers', { id: 'cus_2', name: 'Bob', deleted: true }),
+          record('customers', { id: 'cus_3', name: 'Charlie', deleted: true }),
         ])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['', '', ''],
@@ -1101,8 +1104,8 @@ describe('delete handling', () => {
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
         toAsyncIter([
-          record('customer', { id: 'cus_2', name: 'Bob', deleted: true }),
-          record('customer', { id: 'cus_4', name: 'Dave', deleted: false }),
+          record('customers', { id: 'cus_2', name: 'Bob', deleted: true }),
+          record('customers', { id: 'cus_4', name: 'Dave', deleted: false }),
         ])
       )
     )
@@ -1111,7 +1114,7 @@ describe('delete handling', () => {
     // Nothing gets blanked, row count is unchanged. The donated append
     // includes `deleted: false` so its row is 3-wide; the untouched seeded
     // rows stay 2-wide.
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_1', 'Alice'],
@@ -1121,7 +1124,7 @@ describe('delete handling', () => {
 
     // Donated append's new home is recorded in row_assignments so the
     // service layer knows where to find it on the next sync.
-    expect(extractRowAssignments(out)).toEqual({ customer: { '["cus_4"]': 3 } })
+    expect(extractRowAssignments(out)).toEqual({ customers: { '["cus_4"]': 3 } })
   })
 
   it('1 delete + 2 appends → one donated, one appended to bottom; both in row_assignments', async () => {
@@ -1139,14 +1142,14 @@ describe('delete handling', () => {
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
         toAsyncIter([
-          record('customer', { id: 'cus_2', name: 'Bob', deleted: true }),
-          record('customer', { id: 'cus_4', name: 'Dave', deleted: false }),
-          record('customer', { id: 'cus_5', name: 'Eve', deleted: false }),
+          record('customers', { id: 'cus_2', name: 'Bob', deleted: true }),
+          record('customers', { id: 'cus_4', name: 'Dave', deleted: false }),
+          record('customers', { id: 'cus_5', name: 'Eve', deleted: false }),
         ])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_1', 'Alice'],
@@ -1156,7 +1159,7 @@ describe('delete handling', () => {
     ])
 
     expect(extractRowAssignments(out)).toEqual({
-      customer: { '["cus_4"]': 3, '["cus_5"]': 5 },
+      customers: { '["cus_4"]': 3, '["cus_5"]': 5 },
     })
   })
 
@@ -1173,13 +1176,13 @@ describe('delete handling', () => {
       dest.write(
         { config: cfg(), catalog: cat },
         toAsyncIter([
-          record('customer', { id: 'cus_1', name: 'Alice', deleted: false }),
-          record('customer', { id: 'cus_1', name: 'Alice', deleted: true }),
+          record('customers', { id: 'cus_1', name: 'Alice', deleted: false }),
+          record('customers', { id: 'cus_1', name: 'Alice', deleted: true }),
         ])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([['id', 'name', 'deleted']])
   })
 
@@ -1198,11 +1201,11 @@ describe('delete handling', () => {
     await collect(
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
-        toAsyncIter([record('customer', { id: 'cus_missing', name: '', deleted: true })])
+        toAsyncIter([record('customers', { id: 'cus_missing', name: '', deleted: true })])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     // The delete record's `deleted: true` extends the header to 3 cols, but
     // the untouched seeded data rows stay 2-wide.
     expect(rows).toEqual([
@@ -1225,11 +1228,11 @@ describe('delete handling', () => {
     await collect(
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice', deleted: true })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice', deleted: true })])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_2', 'Bob'], // donor (row 3, seeded 2-wide) swapped into row 2
@@ -1247,7 +1250,7 @@ describe('delete handling', () => {
         catalogWith().streams[0],
         {
           stream: {
-            name: 'invoice',
+            name: 'invoices',
             primary_key: [['id']],
             newer_than_field: '_updated_at',
             json_schema: {
@@ -1270,9 +1273,9 @@ describe('delete handling', () => {
       dest.write(
         { config: cfg(), catalog: multiCat },
         toAsyncIter([
-          record('customer', { id: 'cus_1', name: 'Alice', deleted: false }),
-          record('customer', { id: 'cus_2', name: 'Bob', deleted: false }),
-          record('invoice', { id: 'inv_1', amount: 100, deleted: false }),
+          record('customers', { id: 'cus_1', name: 'Alice', deleted: false }),
+          record('customers', { id: 'cus_2', name: 'Bob', deleted: false }),
+          record('invoices', { id: 'inv_1', amount: 100, deleted: false }),
         ])
       )
     )
@@ -1282,20 +1285,20 @@ describe('delete handling', () => {
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: multiCat },
         toAsyncIter([
-          record('customer', { id: 'cus_1', name: 'Alice', deleted: true }),
-          record('invoice', { id: 'inv_2', amount: 200, deleted: false }),
+          record('customers', { id: 'cus_1', name: 'Alice', deleted: true }),
+          record('invoices', { id: 'inv_2', amount: 200, deleted: false }),
         ])
       )
     )
 
-    const customers = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const customers = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(customers).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_2', 'Bob', 'false'], // donor swapped in
       ['', '', ''],
     ])
 
-    const invoices = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'invoice')!)
+    const invoices = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'invoices')!)
     expect(invoices).toEqual([
       ['id', 'amount', 'deleted'],
       ['inv_1', '100', 'false'], // unaffected by the customers delete
@@ -1312,7 +1315,7 @@ describe('delete handling', () => {
       dest.write(
         { config: cfg(), catalog: cat },
         toAsyncIter([
-          record('customer', {
+          record('customers', {
             id: 'cus_1',
             _account_id: 'acct_A',
             name: 'Alice',
@@ -1326,7 +1329,7 @@ describe('delete handling', () => {
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
         toAsyncIter([
-          record('customer', {
+          record('customers', {
             id: 'cus_1',
             _account_id: 'acct_A',
             name: 'Alice',
@@ -1337,7 +1340,7 @@ describe('delete handling', () => {
     )
 
     // Composite rowKey = '["cus_1","acct_A"]' matches the seeded row → tail blanked.
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', '_account_id', 'name', 'deleted'],
       ['', '', '', ''],
@@ -1365,14 +1368,14 @@ describe('delete handling', () => {
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
         toAsyncIter([
-          record('customer', { id: 'cus_1', name: 'Alice', deleted: true }),
-          record('customer', { id: 'cus_3', name: 'Charlie', deleted: true }),
-          record('customer', { id: 'cus_4', name: 'Dave', deleted: true }),
+          record('customers', { id: 'cus_1', name: 'Alice', deleted: true }),
+          record('customers', { id: 'cus_3', name: 'Charlie', deleted: true }),
+          record('customers', { id: 'cus_4', name: 'Dave', deleted: true }),
         ])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     const dataRows = rows.slice(1) // skip header
     const nonBlankRows = dataRows.filter((r) => r.some((cell) => cell !== ''))
     const firstBlankIdx = dataRows.findIndex((r) => r.every((cell) => cell === ''))
@@ -1602,7 +1605,7 @@ describe('newer_than_field stale write prevention', () => {
     streams: [
       {
         stream: {
-          name: 'customer',
+          name: 'customers',
           primary_key: [['id']],
           json_schema: {
             type: 'object',
@@ -1627,7 +1630,7 @@ describe('newer_than_field stale write prevention', () => {
     const output = await collect(
       dest.write(
         { config: cfg(), catalog: newerThanCatalog },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice' })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice' })])
       )
     )
 
@@ -1636,7 +1639,7 @@ describe('newer_than_field stale write prevention', () => {
       connection_status: {
         status: 'failed',
         message:
-          'stream "customer" record missing newer_than_field "updated"; source must stamp this field on every record per DDR-009',
+          'stream "customers" record missing newer_than_field "updated"; source must stamp this field on every record per DDR-009',
       },
     })
   })
@@ -1648,18 +1651,18 @@ describe('newer_than_field stale write prevention', () => {
     await collect(
       dest.write(
         { config: cfg(), catalog: newerThanCatalog },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice v2', updated: 200 })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice v2', updated: 200 })])
       )
     )
 
     await collect(
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: newerThanCatalog },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice v1 (stale)', updated: 100 })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice v1 (stale)', updated: 100 })])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'updated'],
       ['cus_1', 'Alice v2', '200'],
@@ -1673,18 +1676,18 @@ describe('newer_than_field stale write prevention', () => {
     await collect(
       dest.write(
         { config: cfg(), catalog: newerThanCatalog },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice v1', updated: 100 })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice v1', updated: 100 })])
       )
     )
 
     await collect(
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: newerThanCatalog },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice v2', updated: 200 })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice v2', updated: 200 })])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'updated'],
       ['cus_1', 'Alice v2', '200'],
@@ -1699,13 +1702,13 @@ describe('newer_than_field stale write prevention', () => {
       dest.write(
         { config: cfg(), catalog: newerThanCatalog },
         toAsyncIter([
-          record('customer', { id: 'cus_1', name: 'Alice v2', updated: 200 }),
-          record('customer', { id: 'cus_1', name: 'Alice v1 (stale)', updated: 100 }),
+          record('customers', { id: 'cus_1', name: 'Alice v2', updated: 200 }),
+          record('customers', { id: 'cus_1', name: 'Alice v1 (stale)', updated: 100 }),
         ])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'updated'],
       ['cus_1', 'Alice v2', '200'],
@@ -1720,13 +1723,13 @@ describe('newer_than_field stale write prevention', () => {
       dest.write(
         { config: cfg(), catalog: newerThanCatalog },
         toAsyncIter([
-          record('customer', { id: 'cus_1', name: 'Alice v1', updated: 100 }),
-          record('customer', { id: 'cus_1', name: 'Alice v2', updated: 200 }),
+          record('customers', { id: 'cus_1', name: 'Alice v1', updated: 100 }),
+          record('customers', { id: 'cus_1', name: 'Alice v2', updated: 200 }),
         ])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'updated'],
       ['cus_1', 'Alice v2', '200'],
@@ -1743,18 +1746,18 @@ describe('newer_than_field stale write prevention', () => {
     await collect(
       dest.write(
         { config: cfg(), catalog: newerThanCatalog },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice legacy', updated: '' })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice legacy', updated: '' })])
       )
     )
 
     await collect(
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: newerThanCatalog },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice v1', updated: 100 })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice v1', updated: 100 })])
       )
     )
 
-    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customer')!)
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'updated'],
       ['cus_1', 'Alice v1', '100'],
@@ -1786,11 +1789,8 @@ describe('_updated_at column (source-owned, passthrough)', () => {
     )
 
     const rows = getData(getSpreadsheetIds()[0], 'users')!
-    expect(rows[0]).toEqual(['id', 'name', '_synced_at'])
+    expect(rows[0]).toEqual(['id', 'name'])
     expect(rows[0]).not.toContain('_updated_at')
-    const syncedAtIdx = (rows[0] as string[]).indexOf('_synced_at')
-    expect(syncedAtIdx).toBeGreaterThanOrEqual(0)
-    expect(Date.parse(String(rows[1][syncedAtIdx]))).not.toBeNaN()
   })
 
   it('passes the source-provided _updated_at through verbatim', async () => {
@@ -1823,7 +1823,7 @@ describe('_updated_at column (source-owned, passthrough)', () => {
       streams: [
         {
           stream: {
-            name: 'customer',
+            name: 'customers',
             primary_key: [['id']],
             newer_than_field: '_updated_at',
             json_schema: {
@@ -1840,7 +1840,7 @@ describe('_updated_at column (source-owned, passthrough)', () => {
     await collect(
       dest.write(
         { config: cfg(), catalog: cat },
-        toAsyncIter([record('customer', { id: 'cus_1', name: 'Alice', _updated_at: 1700000000 })])
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice', _updated_at: 1700000000 })])
       )
     )
 
@@ -1848,12 +1848,12 @@ describe('_updated_at column (source-owned, passthrough)', () => {
       dest.write(
         { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
         toAsyncIter([
-          record('customer', { id: 'cus_1', name: 'Alice v2', _updated_at: 1700000010 }),
+          record('customers', { id: 'cus_1', name: 'Alice v2', _updated_at: 1700000010 }),
         ])
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customer')!
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
     const updatedAtIdx = (rows[0] as string[]).indexOf('_updated_at')
     expect(String(rows[1][updatedAtIdx])).toBe('1700000010')
   })
@@ -1870,7 +1870,7 @@ describe('enum constraints on any column', () => {
       streams: [
         {
           stream: {
-            name: options.streamName ?? 'charge',
+            name: options.streamName ?? 'charges',
             primary_key: [['id']],
             newer_than_field: '_updated_at',
             json_schema: {
@@ -1906,7 +1906,7 @@ describe('enum constraints on any column', () => {
     const spreadsheetId = getSpreadsheetIds()[0]
 
     const validations = await readEnumValidations(sheets, spreadsheetId, streamHeaders(catalog))
-    expect(validations.get('charge')?.get('_account_id')?.allowedValues).toEqual([
+    expect(validations.get('charges')?.get('_account_id')?.allowedValues).toEqual([
       'acct_123',
       'acct_456',
     ])
@@ -1915,8 +1915,8 @@ describe('enum constraints on any column', () => {
       dest.write(
         { config: cfg({ spreadsheet_id: spreadsheetId }), catalog },
         toAsyncIter([
-          record('charge', { id: 'ok', _account_id: 'acct_123' }),
-          record('charge', { id: 'bad', _account_id: 'acct_999' }),
+          record('charges', { id: 'ok', _account_id: 'acct_123' }),
+          record('charges', { id: 'bad', _account_id: 'acct_999' }),
         ])
       )
     )
@@ -1944,7 +1944,7 @@ describe('enum constraints on any column', () => {
       getSpreadsheetIds()[0],
       streamHeaders(catalog)
     )
-    expect(validations.get('charge')?.get('status')?.allowedValues).toEqual([
+    expect(validations.get('charges')?.get('status')?.allowedValues).toEqual([
       'val_a',
       'val_b',
       'val_c',
@@ -1956,10 +1956,10 @@ describe('enum constraints on any column', () => {
     const dest = createDestination(sheets)
     const catalog: ConfiguredCatalog = {
       streams: [
-        ...catalogWith(['paid', 'void'], 'status', { streamName: 'charge' }).streams,
+        ...catalogWith(['paid', 'void'], 'status', { streamName: 'charges' }).streams,
         {
           stream: {
-            name: 'invoice',
+            name: 'invoices',
             primary_key: [['id']],
             newer_than_field: '_updated_at',
             json_schema: {
@@ -1985,8 +1985,8 @@ describe('enum constraints on any column', () => {
       dest.write(
         { config: cfg({ spreadsheet_id: spreadsheetId }), catalog },
         toAsyncIter([
-          record('charge', { id: 'ch_1', status: 'paid' }),
-          record('invoice', { id: 'in_1', amount: 42 }),
+          record('charges', { id: 'ch_1', status: 'paid' }),
+          record('invoices', { id: 'in_1', amount: 42 }),
         ])
       )
     )
@@ -1994,7 +1994,7 @@ describe('enum constraints on any column', () => {
     expect(
       out.find((m) => m.type === 'connection_status' && m.connection_status.status === 'failed')
     ).toBeUndefined()
-    expect(stripUpdatedAt(getData(spreadsheetId, 'invoice'))[1]).toEqual(['in_1', '42'])
+    expect(stripUpdatedAt(getData(spreadsheetId, 'invoices'))[1]).toEqual(['in_1', '42'])
   })
 
   it('rejects setup when existing validation disagrees with catalog', async () => {
@@ -2041,7 +2041,7 @@ describe('enum constraints on any column', () => {
     const out = await collect(
       dest.write(
         { config: cfg({ spreadsheet_id: spreadsheetId }), catalog },
-        toAsyncIter([record('charge', { id: 'ch_1' })])
+        toAsyncIter([record('charges', { id: 'ch_1' })])
       )
     )
 

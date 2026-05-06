@@ -97,12 +97,12 @@ describe('protocol schemas', () => {
   describe('Stream', () => {
     it('parses a valid stream', () => {
       const result = Stream.parse({
-        name: 'customer',
+        name: 'customers',
         primary_key: [['id']],
         newer_than_field: '_updated_at',
       })
       expect(result).toEqual({
-        name: 'customer',
+        name: 'customers',
         primary_key: [['id']],
         newer_than_field: '_updated_at',
       })
@@ -134,7 +134,7 @@ describe('protocol schemas', () => {
   describe('ConfiguredStream', () => {
     it('parses a valid configured stream', () => {
       const result = ConfiguredStream.parse({
-        stream: { name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' },
+        stream: { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
         sync_mode: 'incremental',
         destination_sync_mode: 'append_dedup',
         cursor_field: ['updated_at'],
@@ -159,7 +159,7 @@ describe('protocol schemas', () => {
       const result = ConfiguredCatalog.parse({
         streams: [
           {
-            stream: { name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' },
+            stream: { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
             sync_mode: 'full_refresh',
             destination_sync_mode: 'overwrite',
           },
@@ -210,7 +210,7 @@ describe('protocol schemas', () => {
       const msg = RecordMessage.parse({
         type: 'record',
         record: {
-          stream: 'customer',
+          stream: 'customers',
           data: { id: 'cus_1' },
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
@@ -223,7 +223,7 @@ describe('protocol schemas', () => {
       const msg = SourceStateMessage.parse({
         type: 'source_state',
         source_state: {
-          stream: 'customer',
+          stream: 'customers',
           data: { cursor: 'abc' },
         },
       })
@@ -243,10 +243,10 @@ describe('protocol schemas', () => {
     it('LogMessage', () => {
       const msg = LogMessage.parse({
         type: 'log',
-        log: { level: 'info', message: 'hello', data: { stream: 'customer' } },
+        log: { level: 'info', message: 'hello', data: { stream: 'customers' } },
       })
       expect(msg.log.level).toBe('info')
-      expect(msg.log.data).toEqual({ stream: 'customer' })
+      expect(msg.log.data).toEqual({ stream: 'customers' })
     })
 
     it('rejects missing type', () => {
@@ -376,7 +376,7 @@ describe('protocol schemas', () => {
       const result = PipelineConfig.parse({
         source: { type: 'stripe', stripe: { api_key: 'sk_test' } },
         destination: { type: 'postgres', postgres: { url: 'pg://...' } },
-        streams: [{ name: 'customer', sync_mode: 'incremental' }],
+        streams: [{ name: 'customers', sync_mode: 'incremental' }],
       })
       expect(result.streams).toHaveLength(1)
     })
@@ -495,7 +495,7 @@ describe('engine message validation', () => {
   it('valid messages pass through engine.pipeline_read()', async () => {
     const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {
-      source: { type: 'test', test: { streams: { customer: {} } } },
+      source: { type: 'test', test: { streams: { customers: {} } } },
       destination: { type: 'test', test: {} },
     }
 
@@ -507,14 +507,14 @@ describe('engine message validation', () => {
           {
             type: 'record',
             record: {
-              stream: 'customer',
+              stream: 'customers',
               data: { id: 'cus_1' },
               emitted_at: new Date().toISOString(),
             },
           },
           {
             type: 'source_state',
-            source_state: { stream: 'customer', data: { status: 'complete' } },
+            source_state: { stream: 'customers', data: { status: 'complete' } },
           },
         ])
       )
@@ -537,13 +537,15 @@ describe('engine message validation', () => {
         yield {
           type: 'catalog',
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         }
       },
       async *read() {
         // Missing required fields — not a valid Message
-        yield { type: 'record', stream: 'customer' } as unknown as Message
+        yield { type: 'record', stream: 'customers' } as unknown as Message
       },
     }
     const engine = await createEngine(makeResolver(badSource, destinationTest))
@@ -562,14 +564,14 @@ describe('engine message validation', () => {
       async *discover(): AsyncIterable<DiscoverOutput> {
         yield {
           type: 'catalog',
-          catalog: { streams: [{ name: 'customer', primary_key: [['id']] }] },
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
         }
       },
       async *read() {
         yield {
           type: 'record',
           record: {
-            stream: 'customer',
+            stream: 'customers',
             data: { id: 'cus_1' },
             emitted_at: new Date().toISOString(),
           },
@@ -595,21 +597,21 @@ describe('engine message validation', () => {
       async *discover(): AsyncIterable<DiscoverOutput> {
         yield {
           type: 'catalog',
-          catalog: { streams: [{ name: 'customer', primary_key: [['id']] }] },
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
         }
       },
       async *read() {
         yield {
           type: 'record',
           record: {
-            stream: 'customer',
+            stream: 'customers',
             data: { id: 'cus_1' },
             emitted_at: new Date().toISOString(),
           },
         } as Message
         yield {
           type: 'source_state',
-          source_state: { stream: 'customer', data: { cursor: '1' } },
+          source_state: { stream: 'customers', data: { cursor: '1' } },
         } as Message
         throw new Error('proxy CONNECT failed')
       },
@@ -618,7 +620,7 @@ describe('engine message validation', () => {
     const pipeline = {
       source: { type: 'test', test: {} },
       destination: { type: 'test', test: {} },
-      streams: [{ name: 'customer' }],
+      streams: [{ name: 'customers' }],
     }
     const { items, error } = await drainUntilError(engine.pipeline_sync(pipeline))
     expect(error.message).toMatch(/proxy CONNECT failed/)
@@ -636,7 +638,7 @@ describe('engine message validation', () => {
     expect(eof!.eof.status).toBe('failed')
     expect(eof!.eof.has_more).toBe(false)
     // Progress should reflect the record that was processed before the crash
-    expect(eof!.eof.request_progress?.streams?.customer?.record_count).toBe(1)
+    expect(eof!.eof.request_progress?.streams?.customers?.record_count).toBe(1)
   })
 
   it('destination output validation catches malformed messages via pipeline_write', async () => {
@@ -657,7 +659,7 @@ describe('engine message validation', () => {
     }
 
     const pipeline = {
-      source: { type: 'test', test: { streams: { customer: {} } } },
+      source: { type: 'test', test: { streams: { customers: {} } } },
       destination: { type: 'test', test: {} },
     }
     const engine = await createEngine(makeResolver(sourceTest, badDest))
@@ -671,14 +673,14 @@ describe('engine message validation', () => {
             {
               type: 'record',
               record: {
-                stream: 'customer',
+                stream: 'customers',
                 data: { id: 'cus_1' },
                 emitted_at: new Date().toISOString(),
               },
             },
             {
               type: 'source_state',
-              source_state: { stream: 'customer', data: { status: 'complete' } },
+              source_state: { stream: 'customers', data: { status: 'complete' } },
             },
           ])
         )
@@ -695,7 +697,7 @@ describe('engine stream membership validation', () => {
   it('record with known stream passes through', async () => {
     const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {
-      source: { type: 'test', test: { streams: { customer: {} } } },
+      source: { type: 'test', test: { streams: { customers: {} } } },
       destination: { type: 'test', test: {} },
     }
 
@@ -707,14 +709,14 @@ describe('engine stream membership validation', () => {
           {
             type: 'record',
             record: {
-              stream: 'customer',
+              stream: 'customers',
               data: { id: 'cus_1' },
               emitted_at: new Date().toISOString(),
             },
           },
           {
             type: 'source_state',
-            source_state: { stream: 'customer', data: { status: 'complete' } },
+            source_state: { stream: 'customers', data: { status: 'complete' } },
           },
         ])
       )
@@ -735,7 +737,9 @@ describe('engine stream membership validation', () => {
         yield {
           type: 'catalog',
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         }
       },
@@ -768,13 +772,13 @@ describe('engine.pipeline_read() state passthrough', () => {
   it('passes any state shape through to the source', async () => {
     const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {
-      source: { type: 'test', test: { streams: { customer: {} } } },
+      source: { type: 'test', test: { streams: { customers: {} } } },
       destination: { type: 'test', test: {} },
     }
     // Any state shape should be accepted
     const results = await drain(
       engine.pipeline_read(pipeline, {
-        state: { source: { streams: { customer: { anything: 'goes' } }, global: {} } },
+        state: { source: { streams: { customers: { anything: 'goes' } }, global: {} } },
       })
     )
     expect(results.length).toBeGreaterThan(0)
@@ -799,7 +803,9 @@ describe('engine.pipeline_sync() pipeline', () => {
         yield {
           type: 'catalog',
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         }
       },
@@ -807,7 +813,7 @@ describe('engine.pipeline_sync() pipeline', () => {
         receivedState = params.state
         yield {
           type: 'source_state' as const,
-          source_state: { stream: 'customer', data: { status: 'complete' } },
+          source_state: { stream: 'customers', data: { status: 'complete' } },
         }
       },
     }
@@ -816,7 +822,7 @@ describe('engine.pipeline_sync() pipeline', () => {
     await drain(
       engine.pipeline_sync(defaultPipeline, {
         state: {
-          source: { streams: { customer: { cursor: 'cus_1' } }, global: {} },
+          source: { streams: { customers: { cursor: 'cus_1' } }, global: {} },
           destination: {},
           sync_run: {
             progress: {
@@ -839,7 +845,7 @@ describe('engine.pipeline_sync() pipeline', () => {
 
     // parseSyncState validates SyncState envelope, then passes state.source to connector.read()
     expect(receivedState).toEqual({
-      streams: { customer: { cursor: 'cus_1' } },
+      streams: { customers: { cursor: 'cus_1' } },
       global: {},
     })
   })
@@ -857,7 +863,9 @@ describe('engine.pipeline_sync() pipeline', () => {
         yield {
           type: 'catalog',
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         }
       },
@@ -865,7 +873,7 @@ describe('engine.pipeline_sync() pipeline', () => {
         receivedCatalog = params.catalog
         yield {
           type: 'source_state' as const,
-          source_state: { stream: 'customer', data: { remaining: [] } },
+          source_state: { stream: 'customers', data: { remaining: [] } },
         }
       },
     }
@@ -915,7 +923,9 @@ describe('engine.pipeline_sync() pipeline', () => {
         yield {
           type: 'catalog',
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         }
       },
@@ -923,7 +933,7 @@ describe('engine.pipeline_sync() pipeline', () => {
         receivedCatalog = params.catalog
         yield {
           type: 'source_state' as const,
-          source_state: { stream: 'customer', data: { remaining: [] } },
+          source_state: { stream: 'customers', data: { remaining: [] } },
         }
       },
     }
@@ -970,14 +980,16 @@ describe('engine.pipeline_sync() pipeline', () => {
         yield {
           type: 'catalog',
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         }
       },
       async *read() {
         yield {
           type: 'source_state' as const,
-          source_state: { stream: 'customer', data: { remaining: [] } },
+          source_state: { stream: 'customers', data: { remaining: [] } },
         }
       },
     }
@@ -988,7 +1000,7 @@ describe('engine.pipeline_sync() pipeline', () => {
         state: {
           source: {
             streams: {
-              customer: { remaining: [{ gte: '2025-01-01', lt: '2025-06-01', cursor: 'cus_99' }] },
+              customers: { remaining: [{ gte: '2025-01-01', lt: '2025-06-01', cursor: 'cus_99' }] },
             },
             global: {},
           },
@@ -1032,14 +1044,16 @@ describe('engine.pipeline_sync() pipeline', () => {
         yield {
           type: 'catalog',
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         }
       },
       async *read() {
         yield {
           type: 'source_state' as const,
-          source_state: { stream: 'customer', data: { remaining: [] } },
+          source_state: { stream: 'customers', data: { remaining: [] } },
         }
       },
     }
@@ -1091,9 +1105,9 @@ describe('engine.pipeline_sync() pipeline', () => {
           type: 'catalog',
           catalog: {
             streams: [
-              { name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' },
-              { name: 'charge', primary_key: [['id']], newer_than_field: '_updated_at' },
-              { name: 'invoice', primary_key: [['id']], newer_than_field: '_updated_at' },
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+              { name: 'charges', primary_key: [['id']], newer_than_field: '_updated_at' },
+              { name: 'invoices', primary_key: [['id']], newer_than_field: '_updated_at' },
             ],
           },
         }
@@ -1141,14 +1155,14 @@ describe('engine.pipeline_sync() pipeline', () => {
                 total_state_count: 0,
               },
               streams: {
-                customer: { status: 'not_started', state_count: 0, record_count: 0 },
-                charge: {
+                customers: { status: 'not_started', state_count: 0, record_count: 0 },
+                charges: {
                   status: 'skipped',
                   state_count: 0,
                   record_count: 0,
                   message: 'not available',
                 },
-                invoice: {
+                invoices: {
                   status: 'completed',
                   state_count: 0,
                   record_count: 0,
@@ -1162,14 +1176,14 @@ describe('engine.pipeline_sync() pipeline', () => {
     )
 
     const eof = output.find((m) => m.type === 'eof')!
-    expect(receivedCatalogNames).toEqual(['customer'])
+    expect(receivedCatalogNames).toEqual(['customers'])
     expect(eof.eof.request_progress?.streams).toEqual({
-      customer: expect.objectContaining({ status: 'completed' }),
+      customers: expect.objectContaining({ status: 'completed' }),
     })
-    expect(eof.eof.ending_state?.sync_run.progress?.streams.charge).toEqual(
+    expect(eof.eof.ending_state?.sync_run.progress?.streams.charges).toEqual(
       expect.objectContaining({ status: 'skipped', message: 'not available' })
     )
-    expect(eof.eof.ending_state?.sync_run.progress?.streams.invoice).toEqual(
+    expect(eof.eof.ending_state?.sync_run.progress?.streams.invoices).toEqual(
       expect.objectContaining({ status: 'completed' })
     )
     expect(eof.eof.status).toBe('succeeded')
@@ -1189,8 +1203,8 @@ describe('engine.pipeline_sync() pipeline', () => {
           type: 'catalog',
           catalog: {
             streams: [
-              { name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' },
-              { name: 'charge', primary_key: [['id']], newer_than_field: '_updated_at' },
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+              { name: 'charges', primary_key: [['id']], newer_than_field: '_updated_at' },
             ],
           },
         }
@@ -1238,8 +1252,8 @@ describe('engine.pipeline_sync() pipeline', () => {
                 total_state_count: 0,
               },
               streams: {
-                customer: { status: 'not_started', state_count: 0, record_count: 0 },
-                charge: {
+                customers: { status: 'not_started', state_count: 0, record_count: 0 },
+                charges: {
                   status: 'errored',
                   state_count: 0,
                   record_count: 0,
@@ -1254,10 +1268,10 @@ describe('engine.pipeline_sync() pipeline', () => {
     )
 
     const eof = output.find((m) => m.type === 'eof')!
-    expect(receivedCatalogNames).toEqual(['customer', 'charge'])
+    expect(receivedCatalogNames).toEqual(['customers', 'charges'])
     expect(eof.eof.ending_state?.sync_run.progress?.streams).toEqual({
-      customer: expect.objectContaining({ status: 'completed' }),
-      charge: expect.objectContaining({ status: 'completed' }),
+      customers: expect.objectContaining({ status: 'completed' }),
+      charges: expect.objectContaining({ status: 'completed' }),
     })
     expect(eof.eof.status).toBe('succeeded')
   })
@@ -1277,8 +1291,8 @@ describe('engine.pipeline_sync() pipeline', () => {
           type: 'catalog',
           catalog: {
             streams: [
-              { name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' },
-              { name: 'charge', primary_key: [['id']], newer_than_field: '_updated_at' },
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+              { name: 'charges', primary_key: [['id']], newer_than_field: '_updated_at' },
             ],
           },
         }
@@ -1291,14 +1305,14 @@ describe('engine.pipeline_sync() pipeline', () => {
             type: 'stream_status' as const,
             stream_status: { stream: streamName, status: 'start' },
           }
-          if (streamName === 'charge' && readCount === 1) {
-            // Chunk 1: charge errors
+          if (streamName === 'charges' && readCount === 1) {
+            // Chunk 1: charges errors
             yield {
               type: 'stream_status' as const,
               stream_status: { stream: streamName, status: 'error', error: 'upstream 500' },
             }
           } else {
-            // customer: emit a state checkpoint but NOT complete in chunk 1
+            // customers: emit a state checkpoint but NOT complete in chunk 1
             // (simulates partial progress, stream stays 'started')
             // In chunk 2: complete normally
             yield {
@@ -1323,13 +1337,13 @@ describe('engine.pipeline_sync() pipeline', () => {
     const engine = await createEngine(makeResolver(source, destinationTest))
     const runId = 'two-chunk-run'
 
-    // Chunk 1: both streams run; customer partially completes, charge errors
+    // Chunk 1: both streams run; customers partially completes, charges errors
     const chunk1 = await drain(engine.pipeline_sync(defaultPipeline, { run_id: runId }))
     const eof1 = chunk1.find((m) => m.type === 'eof')!
-    expect(eof1.eof.ending_state?.sync_run.progress?.streams.customer).toMatchObject({
+    expect(eof1.eof.ending_state?.sync_run.progress?.streams.customers).toMatchObject({
       status: 'started',
     })
-    expect(eof1.eof.ending_state?.sync_run.progress?.streams.charge).toMatchObject({
+    expect(eof1.eof.ending_state?.sync_run.progress?.streams.charges).toMatchObject({
       status: 'errored',
       message: 'upstream 500',
     })
@@ -1343,17 +1357,17 @@ describe('engine.pipeline_sync() pipeline', () => {
       })
     )
 
-    // charge (errored) should have been excluded; only customer retries
-    expect(receivedCatalogNames).toEqual(['customer'])
+    // charges (errored) should have been excluded; only customers retries
+    expect(receivedCatalogNames).toEqual(['customers'])
 
     const eof2 = chunk2.find((m) => m.type === 'eof')!
-    // charge errored status preserved from chunk 1
-    expect(eof2.eof.ending_state?.sync_run.progress?.streams.charge).toMatchObject({
+    // charges errored status preserved from chunk 1
+    expect(eof2.eof.ending_state?.sync_run.progress?.streams.charges).toMatchObject({
       status: 'errored',
       message: 'upstream 500',
     })
-    // customer completed in chunk 2
-    expect(eof2.eof.ending_state?.sync_run.progress?.streams.customer).toMatchObject({
+    // customers completed in chunk 2
+    expect(eof2.eof.ending_state?.sync_run.progress?.streams.customers).toMatchObject({
       status: 'completed',
     })
     expect(eof2.eof.status).toBe('failed') // errored stream → overall failed
@@ -1372,8 +1386,8 @@ describe('engine.pipeline_sync() pipeline', () => {
           type: 'catalog',
           catalog: {
             streams: [
-              { name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' },
-              { name: 'invoice', primary_key: [['id']], newer_than_field: '_updated_at' },
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+              { name: 'invoices', primary_key: [['id']], newer_than_field: '_updated_at' },
             ],
           },
         }
@@ -1382,14 +1396,14 @@ describe('engine.pipeline_sync() pipeline', () => {
         yield {
           type: 'record' as const,
           record: {
-            stream: 'customer',
+            stream: 'customers',
             data: { id: 'cus_1' },
             emitted_at: '2024-01-01T00:00:00.000Z',
           },
         }
         yield {
           type: 'source_state' as const,
-          source_state: { state_type: 'stream', stream: 'customer', data: { cursor: 'cus_1' } },
+          source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'cus_1' } },
         }
         yield {
           type: 'source_state' as const,
@@ -1404,13 +1418,13 @@ describe('engine.pipeline_sync() pipeline', () => {
         state: {
           source: {
             streams: {
-              customer: { cursor: 'cus_0' },
-              invoice: { cursor: 'inv_2' },
+              customers: { cursor: 'cus_0' },
+              invoices: { cursor: 'inv_2' },
             },
             global: { events_cursor: 'evt_old' },
           },
           destination: {
-            customer: { watermark: 10 },
+            customers: { watermark: 10 },
             schema_version: 1,
           },
           sync_run: {
@@ -1439,13 +1453,13 @@ describe('engine.pipeline_sync() pipeline', () => {
         ending_state: {
           source: {
             streams: {
-              customer: { cursor: 'cus_1' },
-              invoice: { cursor: 'inv_2' },
+              customers: { cursor: 'cus_1' },
+              invoices: { cursor: 'inv_2' },
             },
             global: { events_cursor: 'evt_new' },
           },
           destination: {
-            customer: { watermark: 10 },
+            customers: { watermark: 10 },
             schema_version: 1,
           },
         },
@@ -1465,7 +1479,9 @@ describe('engine.pipeline_sync() pipeline', () => {
         yield {
           type: 'catalog',
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         }
       },
@@ -1474,11 +1490,11 @@ describe('engine.pipeline_sync() pipeline', () => {
 
     const initialState = {
       source: {
-        streams: { customer: { cursor: 'cus_9' } },
+        streams: { customers: { cursor: 'cus_9' } },
         global: { events_cursor: 'evt_9' },
       },
       destination: {
-        customer: { watermark: 99 },
+        customers: { watermark: 99 },
         schema_version: 2,
       },
       sync_run: {
@@ -1519,7 +1535,9 @@ describe('engine.pipeline_sync() pipeline', () => {
         yield {
           type: 'catalog',
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         }
       },
@@ -1527,7 +1545,7 @@ describe('engine.pipeline_sync() pipeline', () => {
         yield {
           type: 'record' as const,
           record: {
-            stream: 'customer',
+            stream: 'customers',
             data: { id: 'cus_10' },
             emitted_at: '2024-01-01T00:00:00.000Z',
           },
@@ -1540,11 +1558,11 @@ describe('engine.pipeline_sync() pipeline', () => {
       engine.pipeline_sync(defaultPipeline, {
         state: {
           source: {
-            streams: { customer: { cursor: 'cus_9' } },
+            streams: { customers: { cursor: 'cus_9' } },
             global: { events_cursor: 'evt_9' },
           },
           destination: {
-            customer: { watermark: 99 },
+            customers: { watermark: 99 },
             schema_version: 2,
           },
           sync_run: {
@@ -1572,11 +1590,11 @@ describe('engine.pipeline_sync() pipeline', () => {
       eof: {
         ending_state: {
           source: {
-            streams: { customer: { cursor: 'cus_9' } },
+            streams: { customers: { cursor: 'cus_9' } },
             global: { events_cursor: 'evt_9' },
           },
           destination: {
-            customer: { watermark: 99 },
+            customers: { watermark: 99 },
             schema_version: 2,
           },
         },
@@ -1598,8 +1616,8 @@ describe('engine.pipeline_sync() pipeline', () => {
           type: 'catalog',
           catalog: {
             streams: [
-              { name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' },
-              { name: 'product', primary_key: [['id']], newer_than_field: '_updated_at' },
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+              { name: 'products', primary_key: [['id']], newer_than_field: '_updated_at' },
             ],
           },
         }
@@ -1612,13 +1630,13 @@ describe('engine.pipeline_sync() pipeline', () => {
     const engine = await createEngine(makeResolver(silentSource, destinationTest))
     const pipeline = {
       ...defaultPipeline,
-      streams: [{ name: 'product' }],
+      streams: [{ name: 'products' }],
     }
     const initialState = {
       source: {
         streams: {
-          customer: { cursor: 'cus_existing' },
-          product: { cursor: 'prod_existing' },
+          customers: { cursor: 'cus_existing' },
+          products: { cursor: 'prod_existing' },
         },
         global: {},
       },
@@ -1645,13 +1663,13 @@ describe('engine.pipeline_sync() pipeline', () => {
 
     // Both cursors preserved even when source emits nothing
     expect(eof!.eof.ending_state?.source.streams).toMatchObject({
-      customer: { cursor: 'cus_existing' },
-      product: { cursor: 'prod_existing' },
+      customers: { cursor: 'cus_existing' },
+      products: { cursor: 'prod_existing' },
     })
   })
 
   it('preserves state for streams not in the current streams filter', async () => {
-    // Source discovers both customer and product, but emits state only for product
+    // Source discovers both customers and products, but emits state only for products
     const source: Source = {
       async *spec() {
         yield { type: 'spec', spec: { config: {} } }
@@ -1664,8 +1682,8 @@ describe('engine.pipeline_sync() pipeline', () => {
           type: 'catalog',
           catalog: {
             streams: [
-              { name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' },
-              { name: 'product', primary_key: [['id']], newer_than_field: '_updated_at' },
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+              { name: 'products', primary_key: [['id']], newer_than_field: '_updated_at' },
             ],
           },
         }
@@ -1675,7 +1693,7 @@ describe('engine.pipeline_sync() pipeline', () => {
           type: 'source_state' as const,
           source_state: {
             state_type: 'stream',
-            stream: 'product',
+            stream: 'products',
             data: { cursor: 'prod_new' },
           },
         }
@@ -1684,16 +1702,16 @@ describe('engine.pipeline_sync() pipeline', () => {
 
     const engine = await createEngine(makeResolver(source, destinationTest))
 
-    // Pipeline filters to only product — but state has cursors for both
+    // Pipeline filters to only products — but state has cursors for both
     const pipeline = {
       ...defaultPipeline,
-      streams: [{ name: 'product' }],
+      streams: [{ name: 'products' }],
     }
     const initialState = {
       source: {
         streams: {
-          customer: { cursor: 'cus_existing' },
-          product: { cursor: 'prod_old' },
+          customers: { cursor: 'cus_existing' },
+          products: { cursor: 'prod_old' },
         },
         global: {},
       },
@@ -1718,17 +1736,17 @@ describe('engine.pipeline_sync() pipeline', () => {
     const results = await drain(engine.pipeline_sync(pipeline, { state: initialState }))
     const eof = results.find((msg) => msg.type === 'eof')
 
-    // customer cursor must be preserved even though only product was synced
+    // customers cursor must be preserved even though only products was synced
     expect(eof!.eof.ending_state?.source.streams).toMatchObject({
-      customer: { cursor: 'cus_existing' },
-      product: { cursor: 'prod_new' },
+      customers: { cursor: 'cus_existing' },
+      products: { cursor: 'prod_new' },
     })
   })
 
   it('basic pipeline: yields state messages from source → destination', async () => {
     const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {
-      source: { type: 'test', test: { streams: { customer: {} } } },
+      source: { type: 'test', test: { streams: { customers: {} } } },
       destination: { type: 'test', test: {} },
     }
     const results = await drain(
@@ -1739,7 +1757,7 @@ describe('engine.pipeline_sync() pipeline', () => {
           {
             type: 'record',
             record: {
-              stream: 'customer',
+              stream: 'customers',
               data: { id: 'cus_1', name: 'Alice' },
               emitted_at: new Date().toISOString(),
             },
@@ -1747,7 +1765,7 @@ describe('engine.pipeline_sync() pipeline', () => {
           {
             type: 'record',
             record: {
-              stream: 'customer',
+              stream: 'customers',
               data: { id: 'cus_2', name: 'Bob' },
               emitted_at: new Date().toISOString(),
             },
@@ -1755,14 +1773,14 @@ describe('engine.pipeline_sync() pipeline', () => {
           {
             type: 'record',
             record: {
-              stream: 'customer',
+              stream: 'customers',
               data: { id: 'cus_3', name: 'Charlie' },
               emitted_at: new Date().toISOString(),
             },
           },
           {
             type: 'source_state',
-            source_state: { stream: 'customer', data: { status: 'complete' } },
+            source_state: { stream: 'customers', data: { status: 'complete' } },
           },
         ])
       )
@@ -1773,7 +1791,7 @@ describe('engine.pipeline_sync() pipeline', () => {
     expect(stateAndEof).toHaveLength(2)
     expect(stateAndEof[0]).toMatchObject({
       type: 'source_state',
-      source_state: { stream: 'customer', data: { status: 'complete' } },
+      source_state: { stream: 'customers', data: { status: 'complete' } },
     })
     expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
@@ -1781,9 +1799,9 @@ describe('engine.pipeline_sync() pipeline', () => {
   it('stream filtering: only configures requested streams', async () => {
     const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {
-      source: { type: 'test', test: { streams: { customer: {}, invoice: {} } } },
+      source: { type: 'test', test: { streams: { customers: {}, invoices: {} } } },
       destination: { type: 'test', test: {} },
-      streams: [{ name: 'customer' }],
+      streams: [{ name: 'customers' }],
     }
     const results = await drain(
       engine.pipeline_sync(
@@ -1793,35 +1811,35 @@ describe('engine.pipeline_sync() pipeline', () => {
           {
             type: 'record',
             record: {
-              stream: 'customer',
+              stream: 'customers',
               data: { id: 'cus_1' },
               emitted_at: new Date().toISOString(),
             },
           },
           {
             type: 'source_state',
-            source_state: { stream: 'customer', data: { status: 'complete' } },
+            source_state: { stream: 'customers', data: { status: 'complete' } },
           },
           {
             type: 'record',
             record: {
-              stream: 'invoice',
+              stream: 'invoices',
               data: { id: 'inv_1' },
               emitted_at: new Date().toISOString(),
             },
           },
           {
             type: 'source_state',
-            source_state: { stream: 'invoice', data: { status: 'complete' } },
+            source_state: { stream: 'invoices', data: { status: 'complete' } },
           },
         ])
       )
     )
 
-    // Only the customer stream state should come through
+    // Only the customers stream state should come through
     const states = results.filter((r) => r.type === 'source_state')
     expect(states).toHaveLength(1)
-    expect((states[0] as SourceStateMessage).source_state.stream).toBe('customer')
+    expect((states[0] as SourceStateMessage).source_state.stream).toBe('customers')
   })
 
   it('non-data messages filtered: only record + state reach destination', async () => {
@@ -1840,7 +1858,9 @@ describe('engine.pipeline_sync() pipeline', () => {
         yield {
           type: 'catalog',
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         }
       },
@@ -1849,14 +1869,14 @@ describe('engine.pipeline_sync() pipeline', () => {
         yield {
           type: 'stream_status' as const,
           stream_status: {
-            stream: 'customer',
+            stream: 'customers',
             status: 'start' as const,
           },
         }
         yield {
           type: 'record' as const,
           record: {
-            stream: 'customer',
+            stream: 'customers',
             data: { id: 'cus_1' },
             emitted_at: '2024-01-01T00:00:00.000Z',
           },
@@ -1864,7 +1884,7 @@ describe('engine.pipeline_sync() pipeline', () => {
         yield {
           type: 'source_state' as const,
           source_state: {
-            stream: 'customer',
+            stream: 'customers',
             data: { after: 'cus_1' },
           },
         }
@@ -1936,7 +1956,9 @@ describe('engine.pipeline_sync() graceful close', () => {
         yield {
           type: 'catalog',
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         } as CatalogMessage
       },
@@ -1952,14 +1974,14 @@ describe('engine.pipeline_sync() graceful close', () => {
       yield {
         type: 'record',
         record: {
-          stream: 'customer',
+          stream: 'customers',
           data: { id: 'cus_1' },
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
       } satisfies RecordMessage
       yield {
         type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customer', data: { cursor: 'cus_1' } },
+        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'cus_1' } },
       } satisfies SourceStateMessage
     }
 
@@ -1981,7 +2003,7 @@ describe('engine.pipeline_sync() graceful close', () => {
       yield {
         type: 'record',
         record: {
-          stream: 'customer',
+          stream: 'customers',
           data: { id: 'cus_1' },
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
@@ -1990,7 +2012,7 @@ describe('engine.pipeline_sync() graceful close', () => {
         type: 'source_state',
         source_state: {
           state_type: 'stream',
-          stream: 'customer',
+          stream: 'customers',
           data: { cursor: 'cus_1' },
         },
       } satisfies SourceStateMessage
@@ -2001,7 +2023,7 @@ describe('engine.pipeline_sync() graceful close', () => {
     )
     const results = await drain(engine.pipeline_sync(defaultPipeline))
     const eof = results.find((m) => m.type === 'eof')!
-    expect(eof.eof.ending_state?.source.streams.customer).toEqual({ cursor: 'cus_1' })
+    expect(eof.eof.ending_state?.source.streams.customers).toEqual({ cursor: 'cus_1' })
   })
 
   it('soft_time_limit drains destination; eof.has_more=true with post-flush state', async () => {
@@ -2012,7 +2034,7 @@ describe('engine.pipeline_sync() graceful close', () => {
         yield {
           type: 'record',
           record: {
-            stream: 'customer',
+            stream: 'customers',
             data: { id: `cus_${++i}` },
             emitted_at: '2024-01-01T00:00:00.000Z',
           },
@@ -2021,7 +2043,7 @@ describe('engine.pipeline_sync() graceful close', () => {
           type: 'source_state',
           source_state: {
             state_type: 'stream',
-            stream: 'customer',
+            stream: 'customers',
             data: { cursor: `cus_${i}` },
           },
         } satisfies SourceStateMessage
@@ -2043,7 +2065,7 @@ describe('engine.pipeline_sync() graceful close', () => {
     // Engine received post-flush state and advanced ending_state
     const states = results.filter((m) => m.type === 'source_state')
     expect(states.length).toBeGreaterThan(0)
-    expect(eof.eof.ending_state?.source.streams.customer).toHaveProperty('cursor')
+    expect(eof.eof.ending_state?.source.streams.customers).toHaveProperty('cursor')
   }, 10_000)
 })
 
@@ -2088,7 +2110,9 @@ describe('engine cancellation integration', () => {
         yield {
           type: 'catalog',
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         } as CatalogMessage
       },
@@ -2098,7 +2122,7 @@ describe('engine cancellation integration', () => {
             yield {
               type: 'record',
               record: {
-                stream: 'customer',
+                stream: 'customers',
                 data: { id: 'cus_1' },
                 emitted_at: '2024-01-01T00:00:00.000Z',
               },
@@ -2122,7 +2146,7 @@ describe('engine cancellation integration', () => {
     const iter = engine.pipeline_read(defaultPipeline)[Symbol.asyncIterator]()
 
     expect(await iter.next()).toMatchObject({
-      value: { type: 'record', record: { stream: 'customer', data: { id: 'cus_1' } } },
+      value: { type: 'record', record: { stream: 'customers', data: { id: 'cus_1' } } },
       done: false,
     })
 
@@ -2170,7 +2194,9 @@ describe('engine cancellation integration', () => {
         yield {
           type: 'catalog',
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         } as CatalogMessage
       },
@@ -2180,7 +2206,7 @@ describe('engine cancellation integration', () => {
             yield {
               type: 'record',
               record: {
-                stream: 'customer',
+                stream: 'customers',
                 data: { id: 'cus_1' },
                 emitted_at: '2024-01-01T00:00:00.000Z',
               },
@@ -2213,7 +2239,7 @@ describe('engine cancellation integration', () => {
               yield {
                 type: 'source_state',
                 source_state: {
-                  stream: 'customer',
+                  stream: 'customers',
                   data: { cursor: 'cus_1' },
                 },
               } satisfies SourceStateMessage
@@ -2246,7 +2272,7 @@ describe('engine cancellation integration', () => {
       if (value.type === 'source_state') {
         gotSourceState = true
         expect(value).toMatchObject({
-          source_state: { stream: 'customer', data: { cursor: 'cus_1' } },
+          source_state: { stream: 'customers', data: { cursor: 'cus_1' } },
         })
       }
       // Once we see the source_state, break after the destination enters blocked state
@@ -2300,20 +2326,20 @@ describe('withTimeRanges', () => {
   }
 
   it('returns same catalog when timeCeiling is undefined', () => {
-    const catalog = mkCatalog(['customer'])
+    const catalog = mkCatalog(['customers'])
     const result = withTimeRanges(catalog, undefined)
     expect(result).toBe(catalog)
   })
 
   it('sets time_range.lt to timeCeiling on all eligible streams', () => {
-    const catalog = mkCatalog(['customer', 'invoice'])
+    const catalog = mkCatalog(['customers', 'invoices'])
     const result = withTimeRanges(catalog, '2025-01-01T00:00:00Z')
     expect(result.streams[0]!.time_range).toEqual({ lt: '2025-01-01T00:00:00Z' })
     expect(result.streams[1]!.time_range).toEqual({ lt: '2025-01-01T00:00:00Z' })
   })
 
   it('preserves existing time_range.gte if already set', () => {
-    const catalog = mkCatalog(['customer'])
+    const catalog = mkCatalog(['customers'])
     catalog.streams[0]!.time_range = {
       gte: '2024-01-01T00:00:00Z',
     }
@@ -2325,7 +2351,7 @@ describe('withTimeRanges', () => {
   })
 
   it('does not override user-provided lt', () => {
-    const catalog = mkCatalog(['customer'])
+    const catalog = mkCatalog(['customers'])
     catalog.streams[0]!.time_range = {
       gte: '2024-01-01T00:00:00Z',
       lt: '2024-06-01T00:00:00Z',
@@ -2338,14 +2364,14 @@ describe('withTimeRanges', () => {
   })
 
   it('skips streams with supports_time_range: false', () => {
-    const catalog = mkCatalog(['customer'])
+    const catalog = mkCatalog(['customers'])
     catalog.streams[0]!.supports_time_range = false
     const result = withTimeRanges(catalog, '2025-01-01T00:00:00Z')
     expect(result.streams[0]!.time_range).toBeUndefined()
   })
 
   it('does not mutate original catalog', () => {
-    const catalog = mkCatalog(['customer'])
+    const catalog = mkCatalog(['customers'])
     withTimeRanges(catalog, '2025-01-01T00:00:00Z')
     expect(catalog.streams[0]!.time_range).toBeUndefined()
   })
@@ -2434,7 +2460,9 @@ describe('engine.pipeline_sync_batch()', () => {
         yield {
           type: 'catalog',
           catalog: {
-            streams: [{ name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' }],
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
           },
         }
       },
@@ -2443,7 +2471,7 @@ describe('engine.pipeline_sync_batch()', () => {
           yield {
             type: 'record',
             record: {
-              stream: 'customer',
+              stream: 'customers',
               data: { id: `cus_${cursor}` },
               emitted_at: '2024-01-01T00:00:00.000Z',
             },
@@ -2452,7 +2480,7 @@ describe('engine.pipeline_sync_batch()', () => {
             type: 'source_state',
             source_state: {
               state_type: 'stream',
-              stream: 'customer',
+              stream: 'customers',
               data: { cursor },
             },
           }
@@ -2474,7 +2502,7 @@ describe('engine.pipeline_sync_batch()', () => {
     expect(eof).toMatchObject({
       has_more: true,
       ending_state: {
-        source: { streams: { customer: { cursor: '2' } } },
+        source: { streams: { customers: { cursor: '2' } } },
         sync_run: { run_id: 'run_batch' },
       },
     })
@@ -2490,7 +2518,7 @@ describe('engine.pipeline_sync_batch()', () => {
     expect(eof).toMatchObject({
       has_more: true,
       ending_state: {
-        source: { streams: { customer: { cursor: '2' } } },
+        source: { streams: { customers: { cursor: '2' } } },
       },
     })
   })

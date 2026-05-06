@@ -35,7 +35,7 @@ export async function ensureObjectTable(
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ${q(schema)}.${q(tableName)} (
       "_raw_data" jsonb NOT NULL,
-      "_synced_at" timestamptz NOT NULL DEFAULT now(),
+      "_last_synced_at" timestamptz,
       "_updated_at" timestamptz NOT NULL DEFAULT now(),
       "id" text GENERATED ALWAYS AS (("_raw_data"->>'id')::text) STORED,
       "created" bigint GENERATED ALWAYS AS (("_raw_data"->>'created')::bigint) STORED,
@@ -71,8 +71,7 @@ export async function upsertObjects(
       VALUES ${placeholders.join(', ')}
       ON CONFLICT ("id")
       DO UPDATE SET
-        "_raw_data" = EXCLUDED."_raw_data",
-        "_synced_at" = now()
+        "_raw_data" = EXCLUDED."_raw_data"
     `,
     values
   )

@@ -28,17 +28,17 @@ source.discover({ config }) → CatalogMessage
   "type": "catalog",
   "streams": [
     {
-      "name": "customer",
+      "name": "customers",
       "primary_key": [["id"]],
       "json_schema": { "type": "object", "properties": { "id": { "type": "string" }, "email": { "type": "string" }, ... } }
     },
     {
-      "name": "product",
+      "name": "products",
       "primary_key": [["id"]],
       "json_schema": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, ... } }
     },
     {
-      "name": "invoice",
+      "name": "invoices",
       "primary_key": [["id"]],
       "json_schema": { ... }
     },
@@ -51,7 +51,7 @@ Each **Stream** has:
 
 | Field         | Description                                                       |
 | ------------- | ----------------------------------------------------------------- |
-| `name`        | Table/resource name (e.g. `customer`, `invoice`)                  |
+| `name`        | Table/resource name (e.g. `customers`, `invoices`)                |
 | `primary_key` | Paths to fields that uniquely identify a record (e.g. `[["id"]]`) |
 | `json_schema` | JSON Schema describing the record shape (from OpenAPI or runtime) |
 | `metadata`    | Source-specific context (e.g. `api_version`, `account_id`)        |
@@ -75,7 +75,7 @@ This produces a **Configured Stream** — the original stream data plus the user
 ```json
 {
   "stream": {
-    "name": "customer",
+    "name": "customers",
     "primary_key": [["id"]],
     "json_schema": { ... },
     "metadata": { "api_version": "2025-04-30.basil" }
@@ -91,8 +91,8 @@ The array of all configured streams forms the **Configured Catalog**:
 ```json
 {
   "streams": [
-    { "stream": { "name": "customer", ... }, "sync_mode": "incremental", "destination_sync_mode": "append_dedup" },
-    { "stream": { "name": "product", ... }, "sync_mode": "full_refresh", "destination_sync_mode": "overwrite" }
+    { "stream": { "name": "customers", ... }, "sync_mode": "incremental", "destination_sync_mode": "append_dedup" },
+    { "stream": { "name": "products", ... }, "sync_mode": "full_refresh", "destination_sync_mode": "overwrite" }
   ]
 }
 ```
@@ -173,7 +173,7 @@ The catalog flows through the entire pipeline so each component knows which stre
 ```
 Catalog (from discover)
   └─ streams: Stream[]
-       ├─ name: string                    "customer"
+       ├─ name: string                    "customers"
        ├─ primary_key: string[][]         [["id"]]
        ├─ json_schema?: object            { type: "object", properties: { ... } }
        └─ metadata?: object               { api_version: "2025-04-30.basil" }

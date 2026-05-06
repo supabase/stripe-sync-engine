@@ -148,7 +148,7 @@ describeWithEnv(
               schema,
             },
           },
-          streams: [{ name: 'product', backfill_limit: 500 }],
+          streams: [{ name: 'products', backfill_limit: 500 }],
         },
       })
       expect(createErr).toBeUndefined()
@@ -160,7 +160,7 @@ describeWithEnv(
       await pollUntil(
         async () => {
           try {
-            const r = await pool.query(`SELECT count(*)::int AS n FROM "${schema}"."product"`)
+            const r = await pool.query(`SELECT count(*)::int AS n FROM "${schema}"."products"`)
             return r.rows[0].n > 0
           } catch {
             return false
@@ -169,12 +169,12 @@ describeWithEnv(
         { timeout: 200_000 }
       )
 
-      const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${schema}"."product"`)
+      const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${schema}"."products"`)
       console.log(`  Synced:   ${rows[0].n} products`)
       expect(rows[0].n).toBeGreaterThan(0)
 
       // Verify shape
-      const { rows: sample } = await pool.query(`SELECT id FROM "${schema}"."product" LIMIT 1`)
+      const { rows: sample } = await pool.query(`SELECT id FROM "${schema}"."products" LIMIT 1`)
       expect(sample[0].id).toMatch(/^prod_/)
 
       // --- List includes the pipeline ---
@@ -240,7 +240,7 @@ describeWithEnv(
             type: 'postgres',
             postgres: { url: POSTGRES_CONTAINER_URL, schema },
           },
-          streams: [{ name: 'product' }],
+          streams: [{ name: 'products' }],
         },
         params: { query: { skip_check: true } },
       })
@@ -266,7 +266,7 @@ describeWithEnv(
 
       if (createdProductId) {
         // Real Stripe: assert the specific product row landed in Postgres
-        const { rows } = await pool.query(`SELECT id FROM "${schema}"."product" WHERE id = $1`, [
+        const { rows } = await pool.query(`SELECT id FROM "${schema}"."products" WHERE id = $1`, [
           createdProductId,
         ])
         expect(rows).toHaveLength(1)

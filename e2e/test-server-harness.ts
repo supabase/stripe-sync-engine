@@ -171,11 +171,11 @@ export async function startServiceHarness(
   const destPool = pool(destDocker.connectionString)
 
   await ensureSchema(sourcePool, SOURCE_SCHEMA)
-  await ensureObjectTable(sourcePool, SOURCE_SCHEMA, 'customer')
+  await ensureObjectTable(sourcePool, SOURCE_SCHEMA, 'customers')
 
   const count = options.customerCount ?? CUSTOMER_COUNT
   const batchSize = options.seedBatchSize ?? SEED_BATCH
-  const template = generateTemplate(spec, 'customer', 'customer')
+  const template = generateTemplate(spec, 'customer', 'customers')
   const objects = applyCreatedTimestampRange(
     Array.from({ length: count }, (_, i) => ({
       ...template,
@@ -185,7 +185,7 @@ export async function startServiceHarness(
     { startUnix: RANGE_START, endUnix: RANGE_END }
   )
   for (let i = 0; i < objects.length; i += batchSize) {
-    await upsertObjects(sourcePool, SOURCE_SCHEMA, 'customer', objects.slice(i, i + batchSize))
+    await upsertObjects(sourcePool, SOURCE_SCHEMA, 'customers', objects.slice(i, i + batchSize))
   }
   const expectedIds = objects.map((o) => o.id as string)
 
@@ -243,16 +243,16 @@ export async function startEngineHarness(): Promise<EngineHarness> {
     startDockerPostgres18(),
     loadBundledSpec(),
   ])
-  const customerTemplate = generateTemplate(spec, 'customer', 'customer')
-  const productTemplate = generateTemplate(spec, 'product', 'product')
+  const customerTemplate = generateTemplate(spec, 'customer', 'customers')
+  const productTemplate = generateTemplate(spec, 'product', 'products')
 
   const sourcePool = pool(sourceDocker.connectionString)
   const destPool = pool(destDocker.connectionString)
 
   await ensureSchema(sourcePool, SOURCE_SCHEMA)
   await Promise.all([
-    ensureObjectTable(sourcePool, SOURCE_SCHEMA, 'customer'),
-    ensureObjectTable(sourcePool, SOURCE_SCHEMA, 'product'),
+    ensureObjectTable(sourcePool, SOURCE_SCHEMA, 'customers'),
+    ensureObjectTable(sourcePool, SOURCE_SCHEMA, 'products'),
   ])
 
   const testServer = await createStripeListServer({

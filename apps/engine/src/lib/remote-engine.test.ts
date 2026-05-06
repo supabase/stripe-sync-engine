@@ -30,7 +30,7 @@ let server: any
 let engineUrl: string
 
 const pipeline: PipelineConfig = {
-  source: { type: 'test', test: { streams: { customer: {} } } },
+  source: { type: 'test', test: { streams: { customers: {} } } },
   destination: { type: 'test', test: {} },
 }
 
@@ -142,14 +142,14 @@ describe('createRemoteEngine', () => {
         {
           type: 'record',
           record: {
-            stream: 'customer',
+            stream: 'customers',
             data: { id: 'cus_1' },
             emitted_at: '2024-01-01T00:00:00.000Z',
           },
         },
         {
           type: 'source_state',
-          source_state: { stream: 'customer', data: { cursor: 'cus_1' } },
+          source_state: { stream: 'customers', data: { cursor: 'cus_1' } },
         },
       ]
       const messages = await collect(engine.pipeline_read(pipeline, undefined, asIterable(input)))
@@ -176,20 +176,20 @@ describe('createRemoteEngine', () => {
         {
           type: 'record',
           record: {
-            stream: 'customer',
+            stream: 'customers',
             data: { id: 'cus_1' },
             emitted_at: '2024-01-01T00:00:00.000Z',
           },
         },
         {
           type: 'source_state',
-          source_state: { stream: 'customer', data: { cursor: 'cus_1' } },
+          source_state: { stream: 'customers', data: { cursor: 'cus_1' } },
         },
       ]
       const output = await collect(engine.pipeline_write(pipeline, asIterable(messages)))
       const stateMessages = output.filter((m) => m.type === 'source_state')
       expect(stateMessages).toHaveLength(1)
-      expect((stateMessages[0] as SourceStateMessage).source_state.stream).toBe('customer')
+      expect((stateMessages[0] as SourceStateMessage).source_state.stream).toBe('customers')
     })
   })
 
@@ -200,14 +200,14 @@ describe('createRemoteEngine', () => {
         {
           type: 'record',
           record: {
-            stream: 'customer',
+            stream: 'customers',
             data: { id: 'cus_1' },
             emitted_at: '2024-01-01T00:00:00.000Z',
           },
         },
         {
           type: 'source_state',
-          source_state: { stream: 'customer', data: { cursor: 'cus_1' } },
+          source_state: { stream: 'customers', data: { cursor: 'cus_1' } },
         },
       ]
       const output = await collect(engine.pipeline_sync(pipeline, undefined, asIterable(input)))

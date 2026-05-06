@@ -300,7 +300,7 @@ function makePipelineConfig(mockStripeUrl: string): string {
         schema: 'test_disconnect',
       },
     },
-    streams: [{ name: 'customer' }],
+    streams: [{ name: 'customers' }],
   })
 }
 

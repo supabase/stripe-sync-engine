@@ -99,7 +99,7 @@ request body; `end` is the last line of the response.
     "pipeline": {
       "source": { "type": "stripe", "api_key": "sk_test_...", "api_version": "2024-04-10" },
       "destination": { "type": "postgres", "connection_string": "..." },
-      "streams": [{ "name": "customer", "sync_mode": "incremental" }]
+      "streams": [{ "name": "customers", "sync_mode": "incremental" }]
     },
     "state": null,
     "time_limit": 30
@@ -110,9 +110,9 @@ request body; `end` is the last line of the response.
 Response stream:
 
 ```json
-{"type":"record","record":{"stream":"customer","data":{"id":"cus_123"}}}
-{"type":"source_state","source_state":{"stream":"customer","data":{"starting_after":"cus_123"}}}
-{"type":"end","end":{"reason":"complete","has_more":false,"ending_state":{"source":{"streams":{"customer":{"starting_after":null}},"global":{}},"engine":{}},"request_progress":{"elapsed_ms":3200,"run_record_count":5000,"rows_per_second":1562,"state_checkpoint_count":2},"stream_progress":{"customer":{"status":"complete","run_record_count":5000,"records_per_second":1562}}}}
+{"type":"record","record":{"stream":"customers","data":{"id":"cus_123"}}}
+{"type":"source_state","source_state":{"stream":"customers","data":{"starting_after":"cus_123"}}}
+{"type":"end","end":{"reason":"complete","has_more":false,"ending_state":{"source":{"streams":{"customers":{"starting_after":null}},"global":{}},"engine":{}},"request_progress":{"elapsed_ms":3200,"run_record_count":5000,"rows_per_second":1562,"state_checkpoint_count":2},"stream_progress":{"customers":{"status":"complete","run_record_count":5000,"records_per_second":1562}}}}
 ```
 
 ---

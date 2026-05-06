@@ -128,7 +128,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
   it('run 1: writes records and persists state', async () => {
     const engine = await createEngine(makeResolver())
     const pipeline = {
-      source: { type: 'test', test: { streams: { customer: {} } } },
+      source: { type: 'test', test: { streams: { customers: {} } } },
       destination: {
         type: 'postgres',
         postgres: { url: connectionString, schema: SCHEMA },
@@ -136,10 +136,10 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
     }
 
     const input = [
-      record('customer', 'cus_1', { name: 'Alice' }),
-      record('customer', 'cus_2', { name: 'Bob' }),
-      record('customer', 'cus_3', { name: 'Charlie' }),
-      state('customer', { after: 'cus_3' }),
+      record('customers', 'cus_1', { name: 'Alice' }),
+      record('customers', 'cus_2', { name: 'Bob' }),
+      record('customers', 'cus_3', { name: 'Charlie' }),
+      state('customers', { after: 'cus_3' }),
     ]
 
     // Set up destination schema/tables, then run pipeline
@@ -158,13 +158,13 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
 
     // Verify records were written
     const { rows: customers } = await pool.query(
-      `SELECT count(*)::int AS n FROM "${SCHEMA}".customer`
+      `SELECT count(*)::int AS n FROM "${SCHEMA}".customers`
     )
     expect(customers[0].n).toBe(3)
 
     // Verify state was persisted
     const { rows: stateRows } = await pool.query(
-      `SELECT data FROM "${SCHEMA}"."${STATE_TABLE}" WHERE stream = 'customer'`
+      `SELECT data FROM "${SCHEMA}"."${STATE_TABLE}" WHERE stream = 'customers'`
     )
     expect(stateRows).toHaveLength(1)
     expect(stateRows[0].data).toEqual({ after: 'cus_3' })
@@ -179,7 +179,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
 
     const engine = await createEngine(makeResolver())
     const pipeline = {
-      source: { type: 'test', test: { streams: { customer: {} } } },
+      source: { type: 'test', test: { streams: { customers: {} } } },
       destination: {
         type: 'postgres',
         postgres: { url: connectionString, schema: SCHEMA },
@@ -187,9 +187,9 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
     }
 
     const input = [
-      record('customer', 'cus_4', { name: 'Diana' }),
-      record('customer', 'cus_5', { name: 'Eve' }),
-      state('customer', { after: 'cus_5' }),
+      record('customers', 'cus_4', { name: 'Diana' }),
+      record('customers', 'cus_5', { name: 'Eve' }),
+      state('customers', { after: 'cus_5' }),
     ]
 
     for await (const msg of engine.pipeline_sync(
@@ -209,13 +209,13 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
 
     // Verify table now has 5 rows total (3 from run 1 + 2 from run 2)
     const { rows: customers } = await pool.query(
-      `SELECT count(*)::int AS n FROM "${SCHEMA}".customer`
+      `SELECT count(*)::int AS n FROM "${SCHEMA}".customers`
     )
     expect(customers[0].n).toBe(5)
 
     // Verify state was updated
     const { rows: stateRows } = await pool.query(
-      `SELECT data FROM "${SCHEMA}"."${STATE_TABLE}" WHERE stream = 'customer'`
+      `SELECT data FROM "${SCHEMA}"."${STATE_TABLE}" WHERE stream = 'customers'`
     )
     expect(stateRows).toHaveLength(1)
     expect(stateRows[0].data).toEqual({ after: 'cus_5' })

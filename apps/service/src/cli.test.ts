@@ -224,7 +224,7 @@ function buildMockApp() {
         streams: {},
       }
       const endingState = {
-        source: { streams: { customer: { cursor: `cus_${count}` } }, global: {} },
+        source: { streams: { customers: { cursor: `cus_${count}` } }, global: {} },
         destination: {},
         sync_run: { progress: runProgress },
       }
@@ -497,7 +497,7 @@ describe('generated pipeline CLI', () => {
         'sync',
         pipelineId,
         '--streams',
-        'customer,price',
+        'customers,prices',
         '--run-id',
         'run_demo',
         '--reset-state',
@@ -508,7 +508,7 @@ describe('generated pipeline CLI', () => {
     expect(syncRequests[0]).toMatchObject({
       id: pipelineId,
       query: { run_id: 'run_demo', reset_state: 'true' },
-      body: { streams: [{ name: 'customer' }, { name: 'price' }] },
+      body: { streams: [{ name: 'customers' }, { name: 'prices' }] },
     })
     // Second iteration should NOT have reset_state (only first does)
     expect(syncRequests[1]?.query).toMatchObject({
@@ -517,7 +517,7 @@ describe('generated pipeline CLI', () => {
     expect(syncRequests[1]?.query).not.toHaveProperty('reset_state')
     // Server persists state, so CLI doesn't need to pass sync_state in body
     expect(syncRequests[1]?.body).toMatchObject({
-      streams: [{ name: 'customer' }, { name: 'price' }],
+      streams: [{ name: 'customers' }, { name: 'prices' }],
     })
     expect(syncRequests[1]?.body).not.toHaveProperty('sync_state')
 
@@ -616,13 +616,13 @@ describe('generated pipeline CLI', () => {
               total_state_count: 0,
             },
             streams: {
-              charge: {
+              charges: {
                 status: 'errored',
                 state_count: 0,
                 record_count: 0,
                 message: 'Stripe list page failed',
               },
-              customer: {
+              customers: {
                 status: syncCount === 1 ? 'started' : 'completed',
                 state_count: 0,
                 record_count: 10,

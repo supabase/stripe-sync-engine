@@ -28,9 +28,7 @@ cleanup() {
   rm -f "$REPO_ROOT"/stripe-sync-openapi-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-engine-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-source-stripe-*.tgz
-  rm -f "$REPO_ROOT"/stripe-sync-source-postgres-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-destination-postgres-*.tgz
-  rm -f "$REPO_ROOT"/stripe-sync-destination-stripe-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-destination-google-sheets-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-state-postgres-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-util-postgres-*.tgz
@@ -54,9 +52,7 @@ PROTOCOL_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-protocol pack 2>/de
 OPENAPI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-openapi pack 2>/dev/null | tail -1)
 ENGINE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-engine pack 2>/dev/null | tail -1)
 SOURCE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-source-stripe pack 2>/dev/null | tail -1)
-SOURCE_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-source-postgres pack 2>/dev/null | tail -1)
 DEST_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-destination-postgres pack 2>/dev/null | tail -1)
-DEST_STRIPE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-destination-stripe pack 2>/dev/null | tail -1)
 DEST_SHEETS_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-destination-google-sheets pack 2>/dev/null | tail -1)
 STATE_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-state-postgres pack 2>/dev/null | tail -1)
 UTIL_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-util-postgres pack 2>/dev/null | tail -1)
@@ -65,9 +61,8 @@ HONO_ZOD_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-hono-zod-openapi pa
 SUPABASE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-integration-supabase pack 2>/dev/null | tail -1)
 LOGGER_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-logger pack 2>/dev/null | tail -1)
 
-for tgz in "$PROTOCOL_TGZ" "$OPENAPI_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$SOURCE_PG_TGZ" \
-           "$DEST_TGZ" "$DEST_STRIPE_TGZ" "$DEST_SHEETS_TGZ" "$STATE_PG_TGZ" "$UTIL_PG_TGZ" \
-           "$TSCLI_TGZ" "$HONO_ZOD_TGZ" "$SUPABASE_TGZ" "$LOGGER_TGZ"; do
+for tgz in "$PROTOCOL_TGZ" "$OPENAPI_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$DEST_SHEETS_TGZ" \
+           "$STATE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" "$HONO_ZOD_TGZ" "$SUPABASE_TGZ" "$LOGGER_TGZ"; do
   if [ ! -f "$tgz" ]; then
     echo "FAIL: tarball not found: $tgz"
     exit 1
@@ -107,9 +102,7 @@ cat > package.json <<EOF
       "@stripe/sync-openapi": "$OPENAPI_TGZ",
       "@stripe/sync-engine": "$ENGINE_TGZ",
       "@stripe/sync-source-stripe": "$SOURCE_TGZ",
-      "@stripe/sync-source-postgres": "$SOURCE_PG_TGZ",
       "@stripe/sync-destination-postgres": "$DEST_TGZ",
-      "@stripe/sync-destination-stripe": "$DEST_STRIPE_TGZ",
       "@stripe/sync-destination-google-sheets": "$DEST_SHEETS_TGZ",
       "@stripe/sync-state-postgres": "$STATE_PG_TGZ",
       "@stripe/sync-util-postgres": "$UTIL_PG_TGZ",
@@ -122,9 +115,8 @@ cat > package.json <<EOF
 }
 EOF
 
-pnpm add "$PROTOCOL_TGZ" "$OPENAPI_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$SOURCE_PG_TGZ" \
-         "$DEST_TGZ" "$DEST_STRIPE_TGZ" "$DEST_SHEETS_TGZ" "$STATE_PG_TGZ" "$UTIL_PG_TGZ" \
-         "$TSCLI_TGZ" "$HONO_ZOD_TGZ" "$SUPABASE_TGZ" "$LOGGER_TGZ" \
+pnpm add "$PROTOCOL_TGZ" "$OPENAPI_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$DEST_SHEETS_TGZ" \
+         "$STATE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" "$HONO_ZOD_TGZ" "$SUPABASE_TGZ" "$LOGGER_TGZ" \
          2>&1 | tail -5
 echo ""
 
@@ -133,7 +125,7 @@ echo ""
 # ---------------------------------------------------------------------------
 
 # JSON-encoded X-Pipeline header value for check requests.
-SYNC_PARAMS='{"source":{"type":"stripe","stripe":{"api_key":"sk_test_fake"}},"destination":{"type":"postgres","postgres":{"url":"postgresql://fake:fake@localhost/fake"}},"streams":[{"name":"product"}]}'
+SYNC_PARAMS='{"source":{"type":"stripe","stripe":{"api_key":"sk_test_fake"}},"destination":{"type":"postgres","postgres":{"url":"postgresql://fake:fake@localhost/fake"}},"streams":[{"name":"products"}]}'
 
 # Run `sync-engine pipeline-check` with fake credentials and given extra flags.
 # Exits non-zero (bad credentials) but must NOT output "not found".

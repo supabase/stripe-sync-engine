@@ -74,7 +74,7 @@ function findStreamStatus(
 /** Advance iterator until `stream_status` complete for a stream (default `customers`). */
 async function drainUntilStreamBackfillComplete(
   iter: AsyncIterator<Message | undefined>,
-  stream = 'customer'
+  stream = 'customers'
 ): Promise<void> {
   for (;;) {
     const { value, done } = await iter.next()
@@ -217,15 +217,15 @@ describe('StripeSource', () => {
   describe('discover()', () => {
     it('returns a CatalogMessage with known streams', async () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customer' }),
-        invoice: makeConfig({ order: 2, tableName: 'invoice' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
+        invoices: makeConfig({ order: 2, tableName: 'invoices' }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
       const cat = (await collectFirst(source.discover({ config }), 'catalog')).catalog
 
       expect(cat.streams).toHaveLength(2)
-      expect(cat.streams.map((s) => s.name)).toEqual(['customer', 'invoice'])
+      expect(cat.streams.map((s) => s.name)).toEqual(['customers', 'invoices'])
       expect(
         (cat.streams[0].json_schema?.properties as Record<string, unknown>)._account_id
       ).toEqual({ type: 'string', enum: ['acct_test_fake123'] })
@@ -233,7 +233,7 @@ describe('StripeSource', () => {
 
     it('excludes resources with sync: false', async () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customer' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
         internal: makeConfig({ order: 2, tableName: 'internal', sync: false }),
       }
 
@@ -241,7 +241,7 @@ describe('StripeSource', () => {
       const cat = (await collectFirst(source.discover({ config }), 'catalog')).catalog
 
       expect(cat.streams).toHaveLength(1)
-      expect(cat.streams[0].name).toBe('customer')
+      expect(cat.streams[0].name).toBe('customers')
     })
 
     it('returns empty streams for empty registry', async () => {
@@ -264,7 +264,7 @@ describe('StripeSource', () => {
       } as unknown as StripeClient)
 
       const messages = await collect(
-        source.setup({ config, catalog: catalog({ name: 'customer', primary_key: [['id']] }) })
+        source.setup({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
       expect(getAccount).toHaveBeenCalledTimes(1)
@@ -302,16 +302,16 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
         }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
       const messages = await collect(
-        source.read({ config, catalog: catalog({ name: 'customer', primary_key: [['id']] }) })
+        source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
       expect(getAccount).toHaveBeenCalledTimes(1)
@@ -336,16 +336,16 @@ describe('StripeSource', () => {
         })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
         }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
       const messages = await collect(
-        source.read({ config, catalog: catalog({ name: 'customer', primary_key: [['id']] }) })
+        source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
       expect(
@@ -353,7 +353,7 @@ describe('StripeSource', () => {
           (m) =>
             m.type === 'stream_status' &&
             m.stream_status.status === 'start' &&
-            m.stream_status.stream === 'customer'
+            m.stream_status.stream === 'customers'
         )
       ).toBe(true)
       for (const id of ['cus_1', 'cus_2', 'cus_3'] as const) {
@@ -361,7 +361,7 @@ describe('StripeSource', () => {
           messages.some(
             (m) =>
               m.type === 'record' &&
-              (m as RecordMessage).record.stream === 'customer' &&
+              (m as RecordMessage).record.stream === 'customers' &&
               (m as RecordMessage).record.data.id === id
           )
         ).toBe(true)
@@ -371,7 +371,7 @@ describe('StripeSource', () => {
           (m) =>
             m.type === 'stream_status' &&
             m.stream_status.status === 'range_complete' &&
-            m.stream_status.stream === 'customer'
+            m.stream_status.stream === 'customers'
         )
       ).toBe(true)
       expect(
@@ -379,7 +379,7 @@ describe('StripeSource', () => {
           (m) =>
             m.type === 'stream_status' &&
             m.stream_status.status === 'complete' &&
-            m.stream_status.stream === 'customer'
+            m.stream_status.stream === 'customers'
         )
       ).toBe(true)
 
@@ -388,7 +388,7 @@ describe('StripeSource', () => {
       )
       expect(streamStates.length).toBeGreaterThanOrEqual(2)
       const custStates = streamStates.filter(
-        (m) => (m.source_state as { stream?: string }).stream === 'customer'
+        (m) => (m.source_state as { stream?: string }).stream === 'customers'
       )
       // Checkpoints may use cursor: null while pages remain; assert progression + shape instead.
       custStates.forEach((m) => expectRemainingShape(m.source_state.data))
@@ -415,14 +415,14 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: custListFn as ResourceConfig['listFn'],
         }),
-        invoice: makeConfig({
+        invoices: makeConfig({
           order: 2,
-          tableName: 'invoice',
+          tableName: 'invoices',
           listFn: invListFn as ResourceConfig['listFn'],
         }),
       }
@@ -432,8 +432,8 @@ describe('StripeSource', () => {
         source.read({
           config,
           catalog: catalog(
-            { name: 'customer', primary_key: [['id']] },
-            { name: 'invoice', primary_key: [['id']] }
+            { name: 'customers', primary_key: [['id']] },
+            { name: 'invoices', primary_key: [['id']] }
           ),
         })
       )
@@ -441,10 +441,10 @@ describe('StripeSource', () => {
       // Streams run in parallel — order is not fixed; each stream emits start, records,
       // checkpoints, range_complete, final state, and complete (counts vary with ranges).
       const custRecords = messages.filter(
-        (m): m is RecordMessage => m.type === 'record' && m.record.stream === 'customer'
+        (m): m is RecordMessage => m.type === 'record' && m.record.stream === 'customers'
       )
       const invRecords = messages.filter(
-        (m): m is RecordMessage => m.type === 'record' && m.record.stream === 'invoice'
+        (m): m is RecordMessage => m.type === 'record' && m.record.stream === 'invoices'
       )
       expect(custRecords).toHaveLength(1)
       expect(invRecords).toHaveLength(1)
@@ -459,7 +459,7 @@ describe('StripeSource', () => {
       )
       expect(completes).toHaveLength(2)
 
-      for (const name of ['customer', 'invoice'] as const) {
+      for (const name of ['customers', 'invoices'] as const) {
         const finalState = messages
           .filter((m): m is SourceStateMessage => m.type === 'source_state')
           .filter((m) => m.source_state.stream === name)
@@ -475,15 +475,15 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
         }),
       }
 
       const priorState = {
-        streams: { customer: remainingInProgress('cus_2') },
+        streams: { customers: remainingInProgress('cus_2') },
         global: {},
       }
 
@@ -491,7 +491,7 @@ describe('StripeSource', () => {
       const messages = await collect(
         source.read({
           config,
-          catalog: catalog({ name: 'customer', primary_key: [['id']] }),
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
           state: priorState,
         })
       )
@@ -512,23 +512,23 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
         }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
       const messages = await collect(
-        source.read({ config, catalog: catalog({ name: 'customer', primary_key: [['id']] }) })
+        source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
       expect(
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status.stream === 'customer' &&
+            m.stream_status.stream === 'customers' &&
             m.stream_status.status === 'start'
         )
       ).toBe(true)
@@ -536,7 +536,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'source_state' &&
-            (m as SourceStateMessage).source_state.stream === 'customer' &&
+            (m as SourceStateMessage).source_state.stream === 'customers' &&
             ((m as SourceStateMessage).source_state.data as StreamState).remaining.length === 0
         )
       ).toBe(true)
@@ -544,7 +544,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status.stream === 'customer' &&
+            m.stream_status.stream === 'customers' &&
             m.stream_status.status === 'range_complete'
         )
       ).toBe(true)
@@ -552,7 +552,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status.stream === 'customer' &&
+            m.stream_status.stream === 'customers' &&
             m.stream_status.status === 'complete'
         )
       ).toBe(true)
@@ -565,7 +565,7 @@ describe('StripeSource', () => {
   describe('fromStripeEvent() — live mode scenarios', () => {
     it('webhook mode emits one RecordMessage + one SourceStateMessage per event', () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customer' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
       }
 
       const event = makeEvent({
@@ -579,7 +579,7 @@ describe('StripeSource', () => {
 
       expect(result).not.toBeNull()
       expect(result!.record.type).toBe('record')
-      expect(result!.record.record.stream).toBe('customer')
+      expect(result!.record.record.stream).toBe('customers')
       expect(result!.record.record.data).toMatchObject({
         id: 'cus_1',
         object: 'customer',
@@ -588,7 +588,7 @@ describe('StripeSource', () => {
       expect(result!.record.record.emitted_at).toBeTypeOf('string')
 
       expect(result!.state.type).toBe('source_state')
-      expect(result!.state.source_state.stream).toBe('customer')
+      expect(result!.state.source_state.stream).toBe('customers')
       expect(result!.state.source_state.data).toEqual({
         eventId: 'evt_1abc',
         eventCreated: 1700000000,
@@ -597,7 +597,7 @@ describe('StripeSource', () => {
 
     it('returns null for unsupported object type', () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customer' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
       }
 
       const event = makeEvent({
@@ -610,7 +610,7 @@ describe('StripeSource', () => {
 
     it('returns null for objects without id (preview/draft)', () => {
       const registry: Record<string, ResourceConfig> = {
-        invoice: makeConfig({ order: 1, tableName: 'invoice' }),
+        invoices: makeConfig({ order: 1, tableName: 'invoices' }),
       }
 
       const event = makeEvent({
@@ -624,7 +624,7 @@ describe('StripeSource', () => {
 
     it('passes through deleted flag from event data', () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customer' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
       }
 
       const event = makeEvent({
@@ -644,7 +644,7 @@ describe('StripeSource', () => {
 
     it('returns null when event data.object has no object field', () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customer' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
       }
 
       const event = makeEvent({
@@ -660,7 +660,7 @@ describe('StripeSource', () => {
       // The same StripeEvent structure is received regardless of transport.
       // This test verifies fromStripeEvent works for any StripeEvent input.
       const registry: Record<string, ResourceConfig> = {
-        invoice: makeConfig({ order: 1, tableName: 'invoice' }),
+        invoices: makeConfig({ order: 1, tableName: 'invoices' }),
       }
 
       const event = makeEvent({
@@ -673,7 +673,7 @@ describe('StripeSource', () => {
       const result = fromStripeEvent(event, registry, '_updated_at')
 
       expect(result).not.toBeNull()
-      expect(result!.record.record.stream).toBe('invoice')
+      expect(result!.record.record.stream).toBe('invoices')
       expect(result!.record.record.data).toMatchObject({ id: 'inv_1', amount_paid: 1000 })
       expect(result!.state.source_state.data).toEqual({
         eventId: 'evt_ws_1',
@@ -687,27 +687,27 @@ describe('StripeSource', () => {
       const listFn = vi.fn().mockRejectedValueOnce(new Error('Rate limit exceeded'))
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
         }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
       const messages = await collect(
-        source.read({ config, catalog: catalog({ name: 'customer', primary_key: [['id']] }) })
+        source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
         type: 'stream_status',
-        stream_status: { stream: 'customer', status: 'start' },
+        stream_status: { stream: 'customers', status: 'start' },
       })
       expect(messages[1]).toMatchObject({
         type: 'stream_status',
         stream_status: {
-          stream: 'customer',
+          stream: 'customers',
           status: 'error',
           error: expect.stringContaining('Rate limit'),
         },
@@ -738,27 +738,27 @@ describe('StripeSource', () => {
       const listFn = vi.fn().mockRejectedValueOnce(new Error('Connection refused'))
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
         }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
       const messages = await collect(
-        source.read({ config, catalog: catalog({ name: 'customer', primary_key: [['id']] }) })
+        source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
         type: 'stream_status',
-        stream_status: { stream: 'customer', status: 'start' },
+        stream_status: { stream: 'customers', status: 'start' },
       })
       expect(messages[1]).toMatchObject({
         type: 'stream_status',
         stream_status: {
-          stream: 'customer',
+          stream: 'customers',
           status: 'error',
           error: expect.stringContaining('Connection refused'),
         },
@@ -771,9 +771,9 @@ describe('StripeSource', () => {
       const listFn = vi.fn().mockResolvedValue({ data: [], has_more: false })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           supportsCreatedFilter: true,
           listFn: listFn as ResourceConfig['listFn'],
         }),
@@ -797,7 +797,7 @@ describe('StripeSource', () => {
 
       const messages = await collect(
         listApiBackfill({
-          catalog: catalog({ name: 'customer' }),
+          catalog: catalog({ name: 'customers' }),
           state: undefined,
           registry,
           client: mockClient,
@@ -834,9 +834,9 @@ describe('StripeSource', () => {
       )
 
       const registry: Record<string, ResourceConfig> = {
-        tax_id: makeConfig({
+        tax_ids: makeConfig({
           order: 1,
-          tableName: 'tax_id',
+          tableName: 'tax_ids',
           supportsCreatedFilter: false,
           listFn: listFn as ResourceConfig['listFn'],
         }),
@@ -844,18 +844,18 @@ describe('StripeSource', () => {
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
       const messages = await collect(
-        source.read({ config, catalog: catalog({ name: 'tax_id', primary_key: [['id']] }) })
+        source.read({ config, catalog: catalog({ name: 'tax_ids', primary_key: [['id']] }) })
       )
 
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
         type: 'stream_status',
-        stream_status: { stream: 'tax_id', status: 'start' },
+        stream_status: { stream: 'tax_ids', status: 'start' },
       })
       expect(messages[1]).toMatchObject({
         type: 'stream_status',
         stream_status: {
-          stream: 'tax_id',
+          stream: 'tax_ids',
           status: 'error',
           error: expect.stringContaining('Invalid API Key'),
         },
@@ -868,23 +868,23 @@ describe('StripeSource', () => {
         .mockRejectedValueOnce(new Error('Authentication failed: must provide a valid API key'))
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
         }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
       const messages = await collect(
-        source.read({ config, catalog: catalog({ name: 'customer', primary_key: [['id']] }) })
+        source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
       expect(messages).toHaveLength(2)
       expect(messages[1]).toMatchObject({
         type: 'stream_status',
         stream_status: {
-          stream: 'customer',
+          stream: 'customers',
           status: 'error',
           error: expect.stringContaining('Authentication failed'),
         },
@@ -935,27 +935,27 @@ describe('StripeSource', () => {
         )
 
         const registry: Record<string, ResourceConfig> = {
-          invoice: makeConfig({
+          invoices: makeConfig({
             order: 1,
-            tableName: 'invoice',
+            tableName: 'invoices',
             listFn: listFn as ResourceConfig['listFn'],
           }),
         }
 
         vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
         const messages = await collect(
-          source.read({ config, catalog: catalog({ name: 'invoice', primary_key: [['id']] }) })
+          source.read({ config, catalog: catalog({ name: 'invoices', primary_key: [['id']] }) })
         )
 
         expect(messages).toHaveLength(2)
         expect(messages[0]).toMatchObject({
           type: 'stream_status',
-          stream_status: { stream: 'invoice', status: 'start' },
+          stream_status: { stream: 'invoices', status: 'start' },
         })
         expect(messages[1]).toMatchObject({
           type: 'stream_status',
           stream_status: {
-            stream: 'invoice',
+            stream: 'invoices',
             status: 'skip',
             reason: expect.stringContaining(reasonSubstring),
           },
@@ -971,14 +971,14 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: failingListFn as ResourceConfig['listFn'],
         }),
-        invoice: makeConfig({
+        invoices: makeConfig({
           order: 2,
-          tableName: 'invoice',
+          tableName: 'invoices',
           listFn: successListFn as ResourceConfig['listFn'],
         }),
       }
@@ -988,24 +988,24 @@ describe('StripeSource', () => {
         source.read({
           config,
           catalog: catalog(
-            { name: 'customer', primary_key: [['id']] },
-            { name: 'invoice', primary_key: [['id']] }
+            { name: 'customers', primary_key: [['id']] },
+            { name: 'invoices', primary_key: [['id']] }
           ),
         })
       )
 
-      expect(hasStreamStatus(messages, 'error', 'customer')).toBe(true)
+      expect(hasStreamStatus(messages, 'error', 'customers')).toBe(true)
       expect(
         messages.some(
           (m) =>
             m.type === 'record' &&
-            (m as RecordMessage).record.stream === 'invoice' &&
+            (m as RecordMessage).record.stream === 'invoices' &&
             (m as RecordMessage).record.data.id === 'inv_1'
         )
       ).toBe(true)
 
-      expect(hasStreamStatus(messages, 'complete', 'customer')).toBe(false)
-      expect(hasStreamStatus(messages, 'complete', 'invoice')).toBe(true)
+      expect(hasStreamStatus(messages, 'complete', 'customers')).toBe(false)
+      expect(hasStreamStatus(messages, 'complete', 'invoices')).toBe(true)
     })
 
     it('swallows AbortError without emitting stream_status error', async () => {
@@ -1020,9 +1020,9 @@ describe('StripeSource', () => {
       )
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
         }),
       }
@@ -1030,7 +1030,7 @@ describe('StripeSource', () => {
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
       const iter = source.read({
         config,
-        catalog: catalog({ name: 'customer', primary_key: [['id']] }),
+        catalog: catalog({ name: 'customers', primary_key: [['id']] }),
       })
 
       const messages: Message[] = []
@@ -1051,7 +1051,7 @@ describe('StripeSource', () => {
       expect(messages).toHaveLength(1)
       expect(messages[0]).toMatchObject({
         type: 'stream_status',
-        stream_status: { stream: 'customer', status: 'start' },
+        stream_status: { stream: 'customers', status: 'start' },
       })
       // Notably absent: stream_status:error — the AbortError was swallowed
       expect(hasStreamStatus(messages, 'error')).toBe(false)
@@ -1061,9 +1061,9 @@ describe('StripeSource', () => {
   describe('read() — error state persistence and skip/retry', () => {
     const skipListFn = vi.fn()
     const skipRegistry: Record<string, ResourceConfig> = {
-      customer: makeConfig({
+      customers: makeConfig({
         order: 1,
-        tableName: 'customer',
+        tableName: 'customers',
         listFn: skipListFn as ResourceConfig['listFn'],
       }),
     }
@@ -1079,10 +1079,10 @@ describe('StripeSource', () => {
       const messages = await collect(
         source.read({
           config,
-          catalog: catalog({ name: 'customer', primary_key: [['id']] }),
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
           state: {
             streams: {
-              customer: { page_cursor: null, status: 'auth_error' },
+              customers: { page_cursor: null, status: 'auth_error' },
             },
             global: {},
           },
@@ -1103,10 +1103,10 @@ describe('StripeSource', () => {
       const messages = await collect(
         source.read({
           config,
-          catalog: catalog({ name: 'customer', primary_key: [['id']] }),
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
           state: {
             streams: {
-              customer: { page_cursor: null, status: 'system_error' },
+              customers: { page_cursor: null, status: 'system_error' },
             },
             global: {},
           },
@@ -1125,10 +1125,10 @@ describe('StripeSource', () => {
       const messages = await collect(
         source.read({
           config,
-          catalog: catalog({ name: 'customer', primary_key: [['id']] }),
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
           state: {
             streams: {
-              customer: { page_cursor: null, status: 'config_error' },
+              customers: { page_cursor: null, status: 'config_error' },
             },
             global: {},
           },
@@ -1150,10 +1150,10 @@ describe('StripeSource', () => {
       const messages = await collect(
         source.read({
           config,
-          catalog: catalog({ name: 'customer', primary_key: [['id']] }),
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
           state: {
             streams: {
-              customer: { page_cursor: null, status: 'transient_error' },
+              customers: { page_cursor: null, status: 'transient_error' },
             },
             global: {},
           },
@@ -1166,7 +1166,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status.stream === 'customer' &&
+            m.stream_status.stream === 'customers' &&
             m.stream_status.status === 'complete'
         )
       ).toBe(true)
@@ -1182,9 +1182,9 @@ describe('StripeSource', () => {
         .mockRejectedValueOnce(new Error('Connection refused'))
 
       const failRegistry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           supportsCreatedFilter: false,
           listFn: failAfterOne as ResourceConfig['listFn'],
         }),
@@ -1194,7 +1194,7 @@ describe('StripeSource', () => {
       const messages = await collect(
         source.read({
           config,
-          catalog: catalog({ name: 'customer', primary_key: [['id']] }),
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
         })
       )
 
@@ -1206,7 +1206,7 @@ describe('StripeSource', () => {
       const checkpointBeforeError = messages
         .slice(0, errorIdx)
         .filter((m): m is SourceStateMessage => m.type === 'source_state')
-        .filter((m) => m.source_state.stream === 'customer')
+        .filter((m) => m.source_state.stream === 'customers')
         .at(-1)
       expect(checkpointBeforeError).toBeDefined()
       const rem = (checkpointBeforeError!.source_state.data as StreamState).remaining
@@ -1219,9 +1219,9 @@ describe('StripeSource', () => {
     // Shared registry for these tests
     const listFn = vi.fn()
     const registry: Record<string, ResourceConfig> = {
-      customer: makeConfig({
+      customers: makeConfig({
         order: 1,
-        tableName: 'customer',
+        tableName: 'customers',
         listFn: listFn as ResourceConfig['listFn'],
       }),
     }
@@ -1240,7 +1240,7 @@ describe('StripeSource', () => {
       const messages = await collect(
         source.read({
           config,
-          catalog: catalog({ name: 'customer', primary_key: [['id']] }),
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
           // no input, no state
         })
       )
@@ -1249,7 +1249,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status.stream === 'customer' &&
+            m.stream_status.stream === 'customers' &&
             m.stream_status.status === 'start'
         )
       ).toBe(true)
@@ -1257,7 +1257,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'record' &&
-            (m as RecordMessage).record.stream === 'customer' &&
+            (m as RecordMessage).record.stream === 'customers' &&
             (m as RecordMessage).record.data.id === 'cus_1'
         )
       ).toBe(true)
@@ -1265,7 +1265,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'source_state' &&
-            (m as SourceStateMessage).source_state.stream === 'customer' &&
+            (m as SourceStateMessage).source_state.stream === 'customers' &&
             ((m as SourceStateMessage).source_state.data as StreamState).remaining.length === 0
         )
       ).toBe(true)
@@ -1273,7 +1273,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status.stream === 'customer' &&
+            m.stream_status.stream === 'customers' &&
             m.stream_status.status === 'range_complete'
         )
       ).toBe(true)
@@ -1281,7 +1281,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status.stream === 'customer' &&
+            m.stream_status.stream === 'customers' &&
             m.stream_status.status === 'complete'
         )
       ).toBe(true)
@@ -1301,7 +1301,7 @@ describe('StripeSource', () => {
 
       const messages = await collect(
         source.read(
-          { config, catalog: catalog({ name: 'customer', primary_key: [['id']] }) },
+          { config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) },
           toIter(event)
         )
       )
@@ -1310,12 +1310,12 @@ describe('StripeSource', () => {
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
         type: 'record',
-        record: { stream: 'customer', data: { id: 'cus_1', name: 'Updated Alice' } },
+        record: { stream: 'customers', data: { id: 'cus_1', name: 'Updated Alice' } },
       })
       expect(messages[1]).toMatchObject({
         type: 'source_state',
         source_state: {
-          stream: 'customer',
+          stream: 'customers',
           data: { eventId: 'evt_wh_1', eventCreated: 1700000000 },
         },
       })
@@ -1337,7 +1337,7 @@ describe('StripeSource', () => {
 
       const messages = await collect(
         source.read(
-          { config, catalog: catalog({ name: 'customer', primary_key: [['id']] }) },
+          { config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) },
           toIter(event)
         )
       )
@@ -1345,7 +1345,7 @@ describe('StripeSource', () => {
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
         type: 'record',
-        record: { stream: 'customer', data: { id: 'cus_2', name: 'Bob via WS' } },
+        record: { stream: 'customers', data: { id: 'cus_2', name: 'Bob via WS' } },
       })
       expect(messages[1]).toMatchObject({
         type: 'source_state',
@@ -1366,7 +1366,7 @@ describe('StripeSource', () => {
       // Catalog only has customers, but event is for invoices
       const messages = await collect(
         source.read(
-          { config, catalog: catalog({ name: 'customer', primary_key: [['id']] }) },
+          { config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) },
           toIter(event)
         )
       )
@@ -1388,9 +1388,9 @@ describe('StripeSource', () => {
       const messages = await collect(
         source.read({
           config,
-          catalog: catalog({ name: 'customer', primary_key: [['id']] }),
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
           state: {
-            streams: { customer: remainingInProgress('cus_2') },
+            streams: { customers: remainingInProgress('cus_2') },
             global: {},
           },
           // no input → backfill mode, but with state from prior run
@@ -1419,9 +1419,9 @@ describe('StripeSource', () => {
       const messages = await collect(
         source.read({
           config,
-          catalog: catalog({ name: 'customer', primary_key: [['id']] }),
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
           state: {
-            streams: { customer: remainingInProgress('cus_3') },
+            streams: { customers: remainingInProgress('cus_3') },
             global: {},
           },
         })
@@ -1441,7 +1441,7 @@ describe('StripeSource', () => {
   describe('read(input) — enriched webhook processing', () => {
     it('delete event yields record with deleted: true', async () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customer' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
@@ -1453,14 +1453,14 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({ config, catalog: catalog({ name: 'customer' }) }, toIter(event))
+        source.read({ config, catalog: catalog({ name: 'customers' }) }, toIter(event))
       )
 
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
         type: 'record',
         record: {
-          stream: 'customer',
+          stream: 'customers',
           recordDeleted: true,
           data: { id: 'cus_1', object: 'customer' },
         },
@@ -1469,7 +1469,7 @@ describe('StripeSource', () => {
       expect(messages[1]).toMatchObject({
         type: 'source_state',
         source_state: {
-          stream: 'customer',
+          stream: 'customers',
           data: { eventId: 'evt_del_1', eventCreated: 1700000000 },
         },
       })
@@ -1477,7 +1477,7 @@ describe('StripeSource', () => {
 
     it('delete event detected by event type (not just deleted flag)', async () => {
       const registry: Record<string, ResourceConfig> = {
-        product: makeConfig({ order: 1, tableName: 'product' }),
+        products: makeConfig({ order: 1, tableName: 'products' }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
@@ -1490,14 +1490,14 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({ config, catalog: catalog({ name: 'product' }) }, toIter(event))
+        source.read({ config, catalog: catalog({ name: 'products' }) }, toIter(event))
       )
 
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
         type: 'record',
         record: {
-          stream: 'product',
+          stream: 'products',
           recordDeleted: true,
           data: { id: 'prod_1', object: 'product' },
         },
@@ -1506,7 +1506,7 @@ describe('StripeSource', () => {
 
     it('subscription event yields subscription_items from nested items.data', async () => {
       const registry: Record<string, ResourceConfig> = {
-        subscription: makeConfig({ order: 1, tableName: 'subscription' }),
+        subscriptions: makeConfig({ order: 1, tableName: 'subscriptions' }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
@@ -1528,32 +1528,32 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({ config, catalog: catalog({ name: 'subscription' }) }, toIter(event))
+        source.read({ config, catalog: catalog({ name: 'subscriptions' }) }, toIter(event))
       )
 
       // 1 subscription record + 2 subscription_item records + 1 state
       expect(messages).toHaveLength(4)
       expect(messages[0]).toMatchObject({
         type: 'record',
-        record: { stream: 'subscription', data: { id: 'sub_1' } },
+        record: { stream: 'subscriptions', data: { id: 'sub_1' } },
       })
       expect(messages[1]).toMatchObject({
         type: 'record',
-        record: { stream: 'subscription_item', data: { id: 'si_1', price: 'price_1' } },
+        record: { stream: 'subscription_items', data: { id: 'si_1', price: 'price_1' } },
       })
       expect(messages[2]).toMatchObject({
         type: 'record',
-        record: { stream: 'subscription_item', data: { id: 'si_2', price: 'price_2' } },
+        record: { stream: 'subscription_items', data: { id: 'si_2', price: 'price_2' } },
       })
       expect(messages[3]).toMatchObject({
         type: 'source_state',
-        source_state: { stream: 'subscription', data: { eventId: 'evt_sub_1' } },
+        source_state: { stream: 'subscriptions', data: { eventId: 'evt_sub_1' } },
       })
     })
 
     it('entitlement summary event yields individual entitlement records', async () => {
       const registry: Record<string, ResourceConfig> = {
-        active_entitlement: makeConfig({ order: 1, tableName: 'active_entitlement' }),
+        active_entitlements: makeConfig({ order: 1, tableName: 'active_entitlements' }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
@@ -1587,7 +1587,7 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({ config, catalog: catalog({ name: 'active_entitlement' }) }, toIter(event))
+        source.read({ config, catalog: catalog({ name: 'active_entitlements' }) }, toIter(event))
       )
 
       // 2 entitlement records + 1 state
@@ -1595,7 +1595,7 @@ describe('StripeSource', () => {
       expect(messages[0]).toMatchObject({
         type: 'record',
         record: {
-          stream: 'active_entitlement',
+          stream: 'active_entitlements',
           data: {
             id: 'ent_1',
             feature: 'feat_premium',
@@ -1607,7 +1607,7 @@ describe('StripeSource', () => {
       expect(messages[1]).toMatchObject({
         type: 'record',
         record: {
-          stream: 'active_entitlement',
+          stream: 'active_entitlements',
           data: {
             id: 'ent_2',
             feature: 'feat_basic',
@@ -1618,7 +1618,7 @@ describe('StripeSource', () => {
       })
       expect(messages[2]).toMatchObject({
         type: 'source_state',
-        source_state: { stream: 'active_entitlement', data: { eventId: 'evt_ent_1' } },
+        source_state: { stream: 'active_entitlements', data: { eventId: 'evt_ent_1' } },
       })
     })
 
@@ -1631,9 +1631,9 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        subscription: makeConfig({
+        subscriptions: makeConfig({
           order: 1,
-          tableName: 'subscription',
+          tableName: 'subscriptions',
           retrieveFn: retrieveFn as ResourceConfig['retrieveFn'],
           isFinalState: (s: { status: string }) => s.status === 'canceled',
         }),
@@ -1651,7 +1651,7 @@ describe('StripeSource', () => {
         source.read(
           {
             config: { ...config, revalidate_objects: ['subscription'] },
-            catalog: catalog({ name: 'subscription' }),
+            catalog: catalog({ name: 'subscriptions' }),
           },
           toIter(event)
         )
@@ -1666,9 +1666,9 @@ describe('StripeSource', () => {
       const retrieveFn = vi.fn()
 
       const registry: Record<string, ResourceConfig> = {
-        subscription: makeConfig({
+        subscriptions: makeConfig({
           order: 1,
-          tableName: 'subscription',
+          tableName: 'subscriptions',
           retrieveFn: retrieveFn as ResourceConfig['retrieveFn'],
           isFinalState: (s: { status: string }) => s.status === 'canceled',
         }),
@@ -1686,7 +1686,7 @@ describe('StripeSource', () => {
         source.read(
           {
             config: { ...config, revalidate_objects: ['subscription'] },
-            catalog: catalog({ name: 'subscription' }),
+            catalog: catalog({ name: 'subscriptions' }),
           },
           toIter(event)
         )
@@ -1700,7 +1700,7 @@ describe('StripeSource', () => {
 
     it('preview objects (no id) produce no output', async () => {
       const registry: Record<string, ResourceConfig> = {
-        invoice: makeConfig({ order: 1, tableName: 'invoice' }),
+        invoices: makeConfig({ order: 1, tableName: 'invoices' }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
@@ -1711,7 +1711,7 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({ config, catalog: catalog({ name: 'invoice' }) }, toIter(event))
+        source.read({ config, catalog: catalog({ name: 'invoices' }) }, toIter(event))
       )
 
       expect(messages).toHaveLength(0)
@@ -1719,7 +1719,7 @@ describe('StripeSource', () => {
 
     it('normalizes aliased object types (checkout.session → checkout_sessions)', async () => {
       const registry: Record<string, ResourceConfig> = {
-        checkout_session: makeConfig({ order: 1, tableName: 'checkout_session' }),
+        checkout_sessions: makeConfig({ order: 1, tableName: 'checkout_sessions' }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
@@ -1731,19 +1731,19 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({ config, catalog: catalog({ name: 'checkout_session' }) }, toIter(event))
+        source.read({ config, catalog: catalog({ name: 'checkout_sessions' }) }, toIter(event))
       )
 
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
         type: 'record',
-        record: { stream: 'checkout_session', data: { id: 'cs_1' } },
+        record: { stream: 'checkout_sessions', data: { id: 'cs_1' } },
       })
     })
 
     it('throws when raw webhook input is provided without webhook_secret', async () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customer' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
@@ -1752,7 +1752,7 @@ describe('StripeSource', () => {
       await expect(
         collect(
           source.read(
-            { config, catalog: catalog({ name: 'customer' }) }, // no webhook_secret
+            { config, catalog: catalog({ name: 'customers' }) }, // no webhook_secret
             toIter(rawInput)
           )
         )
@@ -1762,14 +1762,14 @@ describe('StripeSource', () => {
 
   describe('read() — WebSocket streaming', () => {
     const registry: Record<string, ResourceConfig> = {
-      customer: makeConfig({
+      customers: makeConfig({
         order: 1,
-        tableName: 'customer',
+        tableName: 'customers',
         listFn: (() => Promise.resolve({ data: [], has_more: false })) as ResourceConfig['listFn'],
       }),
-      invoice: makeConfig({
+      invoices: makeConfig({
         order: 2,
-        tableName: 'invoice',
+        tableName: 'invoices',
         listFn: (() => Promise.resolve({ data: [], has_more: false })) as ResourceConfig['listFn'],
       }),
     }
@@ -1805,7 +1805,7 @@ describe('StripeSource', () => {
             api_version: BUNDLED_API_VERSION,
             websocket: true,
           },
-          catalog: catalog({ name: 'customer' }),
+          catalog: catalog({ name: 'customers' }),
         })
         [Symbol.asyncIterator]()
 
@@ -1831,7 +1831,7 @@ describe('StripeSource', () => {
             api_version: BUNDLED_API_VERSION,
             websocket: true,
           },
-          catalog: catalog({ name: 'customer' }),
+          catalog: catalog({ name: 'customers' }),
         })
         [Symbol.asyncIterator]()
 
@@ -1853,13 +1853,13 @@ describe('StripeSource', () => {
             api_version: BUNDLED_API_VERSION,
             websocket: true,
           },
-          catalog: catalog({ name: 'customer' }),
+          catalog: catalog({ name: 'customers' }),
         })
         [Symbol.asyncIterator]()
 
       const m1 = await iter.next()
       expect(m1.value).toMatchObject({ type: 'stream_status', stream_status: { status: 'start' } })
-      await drainUntilStreamBackfillComplete(iter, 'customer')
+      await drainUntilStreamBackfillComplete(iter, 'customers')
 
       // Now push a WebSocket event — capturedOnEvent is set, read() should yield it
       pushWsEvent(
@@ -1875,11 +1875,11 @@ describe('StripeSource', () => {
       const m5 = await iter.next() // state
       expect(m4.value).toMatchObject({
         type: 'record',
-        record: { stream: 'customer', data: { id: 'cus_1', name: 'Alice via WS' } },
+        record: { stream: 'customers', data: { id: 'cus_1', name: 'Alice via WS' } },
       })
       expect(m5.value).toMatchObject({
         type: 'source_state',
-        source_state: { stream: 'customer', data: { eventId: 'evt_ws_1' } },
+        source_state: { stream: 'customers', data: { eventId: 'evt_ws_1' } },
       })
 
       // Clean up — triggers finally block which calls wsClient.close()
@@ -1899,9 +1899,9 @@ describe('StripeSource', () => {
         })
 
       const wsRegistry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
         }),
       }
@@ -1916,7 +1916,7 @@ describe('StripeSource', () => {
             api_version: BUNDLED_API_VERSION,
             websocket: true,
           },
-          catalog: catalog({ name: 'customer' }),
+          catalog: catalog({ name: 'customers' }),
         })
         [Symbol.asyncIterator]()
 
@@ -1940,11 +1940,11 @@ describe('StripeSource', () => {
       const m3 = await iter.next() // ws state
       expect(m2.value).toMatchObject({
         type: 'record',
-        record: { stream: 'customer', data: { id: 'cus_ws_1', name: 'WS Queued' } },
+        record: { stream: 'customers', data: { id: 'cus_ws_1', name: 'WS Queued' } },
       })
       expect(m3.value).toMatchObject({
         type: 'source_state',
-        source_state: { stream: 'customer', data: { eventId: 'evt_ws_queued' } },
+        source_state: { stream: 'customers', data: { eventId: 'evt_ws_queued' } },
       })
 
       // Page 1: backfill record + state
@@ -1954,7 +1954,7 @@ describe('StripeSource', () => {
       expect(m5.value).toMatchObject({
         type: 'source_state',
         source_state: {
-          stream: 'customer',
+          stream: 'customers',
           data: expect.objectContaining({
             remaining: expect.arrayContaining([expect.objectContaining({ cursor: 'cus_1' })]),
           }),
@@ -1969,7 +1969,7 @@ describe('StripeSource', () => {
         if (
           n.value?.type === 'stream_status' &&
           n.value.stream_status.status === 'complete' &&
-          n.value.stream_status.stream === 'customer'
+          n.value.stream_status.stream === 'customers'
         ) {
           break
         }
@@ -1984,7 +1984,7 @@ describe('StripeSource', () => {
         tail.some(
           (m) =>
             m.type === 'source_state' &&
-            (m as SourceStateMessage).source_state.stream === 'customer' &&
+            (m as SourceStateMessage).source_state.stream === 'customers' &&
             ((m as SourceStateMessage).source_state.data as StreamState).remaining.length === 0
         )
       ).toBe(true)
@@ -2003,7 +2003,7 @@ describe('StripeSource', () => {
       const m10 = await iter.next() // state
       expect(m9.value).toMatchObject({
         type: 'record',
-        record: { stream: 'customer', data: { id: 'cus_live', name: 'Live Event' } },
+        record: { stream: 'customers', data: { id: 'cus_live', name: 'Live Event' } },
       })
       expect(m10.value).toMatchObject({
         type: 'source_state',
@@ -2024,12 +2024,12 @@ describe('StripeSource', () => {
             api_version: BUNDLED_API_VERSION,
             websocket: true,
           },
-          catalog: catalog({ name: 'customer' }),
+          catalog: catalog({ name: 'customers' }),
         })
         [Symbol.asyncIterator]()
 
       await iter.next() // start
-      await drainUntilStreamBackfillComplete(iter, 'customer')
+      await drainUntilStreamBackfillComplete(iter, 'customers')
 
       // Push event for invoices (not in catalog) — should be skipped
       pushWsEvent(
@@ -2053,7 +2053,7 @@ describe('StripeSource', () => {
       const m1 = await iter.next()
       expect(m1.value).toMatchObject({
         type: 'record',
-        record: { stream: 'customer', data: { id: 'cus_1' } },
+        record: { stream: 'customers', data: { id: 'cus_1' } },
       })
 
       await iter.return()
@@ -2072,7 +2072,7 @@ describe('StripeSource', () => {
             api_version: BUNDLED_API_VERSION,
             websocket: true,
           },
-          catalog: catalog({ name: 'customer' }),
+          catalog: catalog({ name: 'customers' }),
         })
         [Symbol.asyncIterator]()
 
@@ -2085,7 +2085,7 @@ describe('StripeSource', () => {
     it('return() stops an idle websocket stream without waiting for another event', async () => {
       const listFn = vi.fn().mockResolvedValue({ data: [], has_more: false })
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customer', listFn }),
+        customers: makeConfig({ order: 1, tableName: 'customers', listFn }),
       }
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
 
@@ -2096,13 +2096,13 @@ describe('StripeSource', () => {
             api_version: BUNDLED_API_VERSION,
             websocket: true,
           },
-          catalog: catalog({ name: 'customer' }),
+          catalog: catalog({ name: 'customers' }),
           state: { streams: {}, global: {} },
         })
         [Symbol.asyncIterator]()
 
       await iter.next()
-      await drainUntilStreamBackfillComplete(iter, 'customer')
+      await drainUntilStreamBackfillComplete(iter, 'customers')
 
       const blockedNext = iter.next()
       void blockedNext.catch(() => undefined)
@@ -2153,10 +2153,10 @@ describe('StripeSource', () => {
     it('starts an HTTP server on webhook_port and processes POSTed webhooks', async () => {
       const listFn = vi.fn().mockResolvedValue({ data: [], has_more: false })
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customer', listFn }),
+        customers: makeConfig({ order: 1, tableName: 'customers', listFn }),
       }
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
-      const cat = catalog({ name: 'customer' })
+      const cat = catalog({ name: 'customers' })
 
       // Use port 0 so the OS picks a free port
       const cfg = {
@@ -2198,9 +2198,9 @@ describe('StripeSource', () => {
     it('skips backfill when all streams are already complete', async () => {
       const listFn = vi.fn()
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
         }),
       }
@@ -2209,8 +2209,8 @@ describe('StripeSource', () => {
       const messages = await collect(
         source.read({
           config: { ...config, poll_events: true },
-          catalog: catalog({ name: 'customer', primary_key: [['id']] }),
-          state: { streams: { customer: { remaining: [] } }, global: {} },
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          state: { streams: { customers: { remaining: [] } }, global: {} },
         })
       )
 
@@ -2238,9 +2238,9 @@ describe('StripeSource', () => {
     it('stamps initial events_cursor after first backfill completes', async () => {
       const listFn = vi.fn()
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
         }),
       }
@@ -2250,8 +2250,8 @@ describe('StripeSource', () => {
       const messages = await collect(
         source.read({
           config: { ...config, poll_events: true },
-          catalog: catalog({ name: 'customer', primary_key: [['id']] }),
-          state: { streams: { customer: { remaining: [] } }, global: {} },
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          state: { streams: { customers: { remaining: [] } }, global: {} },
         })
       )
 
@@ -2268,9 +2268,9 @@ describe('StripeSource', () => {
     it('does not run events polling when poll_events is false/absent', async () => {
       const listFn = vi.fn()
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
         }),
       }
@@ -2279,8 +2279,8 @@ describe('StripeSource', () => {
       const messages = await collect(
         source.read({
           config, // no poll_events
-          catalog: catalog({ name: 'customer', primary_key: [['id']] }),
-          state: { streams: { customer: { remaining: [] } }, global: {} },
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          state: { streams: { customers: { remaining: [] } }, global: {} },
         })
       )
 
@@ -2299,14 +2299,14 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: custListFn as ResourceConfig['listFn'],
         }),
-        invoice: makeConfig({
+        invoices: makeConfig({
           order: 2,
-          tableName: 'invoice',
+          tableName: 'invoices',
           listFn: (() =>
             Promise.resolve({
               data: [{ id: 'inv_1' }],
@@ -2320,17 +2320,17 @@ describe('StripeSource', () => {
         source.read({
           config: { ...config, poll_events: true },
           catalog: catalog(
-            { name: 'customer', primary_key: [['id']] },
-            { name: 'invoice', primary_key: [['id']] }
+            { name: 'customers', primary_key: [['id']] },
+            { name: 'invoices', primary_key: [['id']] }
           ),
           // customers is complete, but invoices has no checkpoint yet
-          state: { streams: { customer: { remaining: [] } }, global: {} },
+          state: { streams: { customers: { remaining: [] } }, global: {} },
         })
       )
 
       // Invoices should be backfilled (listFn called)
       const records = messages.filter((m): m is RecordMessage => m.type === 'record')
-      expect(records.some((r) => r.record.stream === 'invoice')).toBe(true)
+      expect(records.some((r) => r.record.stream === 'invoices')).toBe(true)
 
       // customers listFn should NOT be called (already complete)
       expect(custListFn).not.toHaveBeenCalled()
@@ -2354,9 +2354,9 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           supportsCreatedFilter: true,
           listFn: listFn as ResourceConfig['listFn'],
         }),
@@ -2377,9 +2377,9 @@ describe('StripeSource', () => {
 
       const messages = await collect(
         listApiBackfill({
-          catalog: catalog({ name: 'customer' }),
+          catalog: catalog({ name: 'customers' }),
           state: {
-            customer: { remaining: priorRemaining },
+            customers: { remaining: priorRemaining },
           },
           registry,
           client: mockClient,
@@ -2414,9 +2414,9 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           supportsCreatedFilter: true,
           listFn: listFn as ResourceConfig['listFn'],
         }),
@@ -2431,7 +2431,7 @@ describe('StripeSource', () => {
 
       const messages = await collect(
         listApiBackfill({
-          catalog: catalog({ name: 'customer' }),
+          catalog: catalog({ name: 'customers' }),
           state: undefined,
           registry,
           client: mockClient,
@@ -2467,9 +2467,9 @@ describe('StripeSource', () => {
         })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           supportsCreatedFilter: true,
           listFn: listFn as ResourceConfig['listFn'],
         }),
@@ -2480,7 +2480,7 @@ describe('StripeSource', () => {
           catalog: {
             streams: [
               {
-                stream: { name: 'customer', newer_than_field: '_updated_at' },
+                stream: { name: 'customers', newer_than_field: '_updated_at' },
                 time_range: { gte: TEST_RANGE_GTE, lt: TEST_RANGE_LT },
               },
             ],
@@ -2516,7 +2516,7 @@ describe('StripeSource', () => {
       expect(rangeCompletes).toContainEqual(
         expect.objectContaining({
           stream_status: expect.objectContaining({
-            stream: 'customer',
+            stream: 'customers',
             range_complete: {
               gte: new Date((1_500_000_000 + 1) * 1000).toISOString(),
               lt: TEST_RANGE_LT,
@@ -2529,7 +2529,7 @@ describe('StripeSource', () => {
       expect(rangeCompletes).toContainEqual(
         expect.objectContaining({
           stream_status: expect.objectContaining({
-            stream: 'customer',
+            stream: 'customers',
             range_complete: expect.objectContaining({
               lt: new Date(1_500_000_001 * 1000).toISOString(),
             }),
@@ -2547,9 +2547,9 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        tax_id: makeConfig({
+        tax_ids: makeConfig({
           order: 1,
-          tableName: 'tax_id',
+          tableName: 'tax_ids',
           supportsCreatedFilter: false,
           listFn: listFn as ResourceConfig['listFn'],
         }),
@@ -2560,7 +2560,7 @@ describe('StripeSource', () => {
 
       const messages = await collect(
         listApiBackfill({
-          catalog: catalog({ name: 'tax_id' }),
+          catalog: catalog({ name: 'tax_ids' }),
           state: undefined,
           registry,
           client: mockClient,
@@ -2586,9 +2586,9 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        reporting_report_type: makeConfig({
+        reporting_report_types: makeConfig({
           order: 1,
-          tableName: 'reporting_report_type',
+          tableName: 'reporting_report_types',
           supportsCreatedFilter: false,
           supportsLimit: false,
           supportsForwardPagination: false,
@@ -2601,7 +2601,7 @@ describe('StripeSource', () => {
 
       const messages = await collect(
         listApiBackfill({
-          catalog: catalog({ name: 'reporting_report_type' }),
+          catalog: catalog({ name: 'reporting_report_types' }),
           state: undefined,
           registry,
           client: mockClient,
@@ -2629,15 +2629,15 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           supportsCreatedFilter: true,
           listFn: parallelListFn as ResourceConfig['listFn'],
         }),
-        tax_id: makeConfig({
+        tax_ids: makeConfig({
           order: 2,
-          tableName: 'tax_id',
+          tableName: 'tax_ids',
           supportsCreatedFilter: false,
           listFn: sequentialListFn as ResourceConfig['listFn'],
         }),
@@ -2654,8 +2654,8 @@ describe('StripeSource', () => {
         listApiBackfill({
           catalog: {
             streams: [
-              { stream: { name: 'customer', newer_than_field: '_updated_at' } },
-              { stream: { name: 'tax_id', newer_than_field: '_updated_at' } },
+              { stream: { name: 'customers', newer_than_field: '_updated_at' } },
+              { stream: { name: 'tax_ids', newer_than_field: '_updated_at' } },
             ],
           },
           state: undefined,
@@ -2686,14 +2686,14 @@ describe('StripeSource', () => {
     it('respects maxConcurrentStreams when scheduling stream backfills', async () => {
       const callOrder: string[] = []
       const firstListFn = vi.fn(async () => {
-        callOrder.push('customer')
+        callOrder.push('customers')
         return {
           data: [{ id: 'cus_1', created: 1_500_000_000 }],
           has_more: false,
         }
       })
       const secondListFn = vi.fn(async () => {
-        callOrder.push('invoice')
+        callOrder.push('invoices')
         return {
           data: [{ id: 'cus_2', created: 1_500_000_100 }],
           has_more: false,
@@ -2701,15 +2701,15 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           supportsCreatedFilter: true,
           listFn: firstListFn as ResourceConfig['listFn'],
         }),
-        invoice: makeConfig({
+        invoices: makeConfig({
           order: 2,
-          tableName: 'invoice',
+          tableName: 'invoices',
           supportsCreatedFilter: true,
           listFn: secondListFn as ResourceConfig['listFn'],
         }),
@@ -2719,8 +2719,8 @@ describe('StripeSource', () => {
         listApiBackfill({
           catalog: {
             streams: [
-              { stream: { name: 'customer', newer_than_field: '_updated_at' } },
-              { stream: { name: 'invoice', newer_than_field: '_updated_at' } },
+              { stream: { name: 'customers', newer_than_field: '_updated_at' } },
+              { stream: { name: 'invoices', newer_than_field: '_updated_at' } },
             ],
           },
           state: undefined,
@@ -2737,19 +2737,19 @@ describe('StripeSource', () => {
       // With maxConcurrentStreams: 1, streams run sequentially
       expect(firstListFn).toHaveBeenCalledTimes(1)
       expect(secondListFn).toHaveBeenCalledTimes(1)
-      expect(callOrder).toEqual(['customer', 'invoice'])
+      expect(callOrder).toEqual(['customers', 'invoices'])
 
       const statusMsgs = messages.filter(
         (m): m is StreamStatusMessage => m.type === 'stream_status'
       )
       expect(statusMsgs.map((m) => `${m.stream_status.stream}:${m.stream_status.status}`)).toEqual(
         expect.arrayContaining([
-          'customer:start',
-          'customer:range_complete',
-          'customer:complete',
-          'invoice:start',
-          'invoice:range_complete',
-          'invoice:complete',
+          'customers:start',
+          'customers:range_complete',
+          'customers:complete',
+          'invoices:start',
+          'invoices:range_complete',
+          'invoices:complete',
         ])
       )
     })
@@ -2834,9 +2834,9 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
         }),
       }
@@ -2846,14 +2846,14 @@ describe('StripeSource', () => {
       const iter = customSource
         .read({
           config: { api_key: 'sk_test_fake', api_version: BUNDLED_API_VERSION },
-          catalog: catalog({ name: 'customer', primary_key: [['id']] }),
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
           state: { streams: {}, global: {} },
         })
         [Symbol.asyncIterator]()
 
       expect((await iter.next()).value).toMatchObject({
         type: 'stream_status',
-        stream_status: { stream: 'customer', status: 'start' },
+        stream_status: { stream: 'customers', status: 'start' },
       })
 
       const blockedNext = iter.next()
@@ -2882,9 +2882,9 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
-          tableName: 'customer',
+          tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
         }),
       }
@@ -2894,7 +2894,7 @@ describe('StripeSource', () => {
       await collect(
         customSource.read({
           config: { api_key: 'sk_test_fake', api_version: BUNDLED_API_VERSION },
-          catalog: catalog({ name: 'customer', primary_key: [['id']] }),
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
         })
       )
 

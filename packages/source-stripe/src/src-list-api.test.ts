@@ -122,12 +122,12 @@ describe('isSkippableError', () => {
 
   describe.each([
     [
-      'v2_core_account (platform)',
+      'v2_core_accounts (platform)',
       "Accounts v2 is not enabled for your platform. If you're interested in using this API with your integration, please visit https://dashboard.stripe.com/acct_1DfwS2ClCIKljWvs/settings/connect/platform-setup. [GET /v2/core/accounts (400)] {request-id=req_v2HaQWYCiDgV6xQZ7, stripe-should-retry=false}",
       true,
     ],
     [
-      'v2_core_account (livemode merchant)',
+      'v2_core_accounts (livemode merchant)',
       'Accounts v2 is not enabled for your livemode merchant acct_1NIFdXLd02PKGbD5. Please visit https://docs.stripe.com/connect/use-accounts-as-customers to enable Accounts v2. [GET /v2/core/accounts (400)] {request-id=req_v2yowYQ7yMNDkuvFi, stripe-should-retry=false}',
       true,
     ],

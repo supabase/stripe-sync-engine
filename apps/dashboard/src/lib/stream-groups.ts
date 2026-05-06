@@ -16,7 +16,7 @@ export interface StreamGroup {
  * Group streams by inferring categories from their names.
  *
  * Uses prefix heuristics — not a hardcoded mapping. Streams sharing a
- * common prefix word (e.g. "payment_intent", "payment_method" → "Payment")
+ * common prefix word (e.g. "payment_intents", "payment_methods" → "Payment")
  * are grouped together. Single-word names become their own group.
  *
  * The algorithm:
@@ -56,35 +56,51 @@ export function inferGroupName(streamName: string): string {
   // Handle snake_case names — use first word as group
   const firstWord = streamName.split('_')[0]
 
-  // Map known prefixes to Stripe product groups (singular per resource naming spec).
+  // Map known prefixes to Stripe product groups (both singular and plural forms)
   const REFINEMENTS: Record<string, string> = {
     subscription: 'Billing',
+    subscriptions: 'Billing',
     invoice: 'Billing',
+    invoices: 'Billing',
     credit: 'Billing',
     price: 'Billing',
+    prices: 'Billing',
     plan: 'Billing',
+    plans: 'Billing',
     coupon: 'Billing',
+    coupons: 'Billing',
     payment: 'Payments',
     charge: 'Payments',
+    charges: 'Payments',
     refund: 'Payments',
+    refunds: 'Payments',
     dispute: 'Payments',
+    disputes: 'Payments',
     setup: 'Payments',
     checkout: 'Checkout',
     customer: 'Customers',
+    customers: 'Customers',
     tax: 'Tax',
     product: 'Products',
+    products: 'Products',
     transfer: 'Transfers',
+    transfers: 'Transfers',
     payout: 'Payments',
+    payouts: 'Payments',
     balance: 'Transfers',
     application: 'Connect',
     account: 'Connect',
+    accounts: 'Connect',
     issuing: 'Issuing',
     treasury: 'Treasury',
     radar: 'Radar',
     early: 'Radar',
     file: 'Files',
+    files: 'Files',
     event: 'Events',
+    events: 'Events',
     webhook: 'Webhooks',
+    webhooks: 'Webhooks',
   }
 
   return REFINEMENTS[firstWord] ?? capitalize(firstWord)

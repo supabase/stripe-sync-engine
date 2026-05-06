@@ -32,7 +32,7 @@ describe('applySelection()', () => {
   it('prunes json_schema.properties to selected fields plus primary key', () => {
     const catalog = makeCatalog([
       {
-        name: 'customer',
+        name: 'customers',
         fields: ['name', 'email'],
         json_schema: {
           type: 'object',
@@ -40,7 +40,6 @@ describe('applySelection()', () => {
             id: { type: 'string' },
             name: { type: 'string' },
             email: { type: 'string' },
-            _updated_at: { type: 'string' },
             phone: { type: 'string' },
           },
         },
@@ -48,13 +47,13 @@ describe('applySelection()', () => {
     ])
 
     const filtered = applySelection(catalog)
-    expect(Object.keys(props(filtered))).toEqual(['id', 'name', 'email', '_updated_at'])
+    expect(Object.keys(props(filtered))).toEqual(['id', 'name', 'email'])
   })
 
   it('passes catalog through unchanged when no fields configured', () => {
     const catalog = makeCatalog([
       {
-        name: 'product',
+        name: 'products',
         json_schema: {
           type: 'object',
           properties: {
@@ -79,7 +78,7 @@ describe('applySelection()', () => {
   it('filters only streams that have fields set', () => {
     const catalog = makeCatalog([
       {
-        name: 'customer',
+        name: 'customers',
         fields: ['email'],
         json_schema: {
           type: 'object',
@@ -91,7 +90,7 @@ describe('applySelection()', () => {
         },
       },
       {
-        name: 'product',
+        name: 'products',
         json_schema: {
           type: 'object',
           properties: {
@@ -111,36 +110,36 @@ describe('applySelection()', () => {
 describe('excludeTerminalStreams()', () => {
   it('excludes completed, skipped, and errored streams', () => {
     const catalog = makeCatalog([
-      { name: 'customer' },
-      { name: 'charge' },
-      { name: 'invoice' },
-      { name: 'product' },
-      { name: 'price' },
+      { name: 'customers' },
+      { name: 'charges' },
+      { name: 'invoices' },
+      { name: 'products' },
+      { name: 'prices' },
     ])
 
     const filtered = excludeTerminalStreams(catalog, {
       streams: {
-        customer: { status: 'completed', state_count: 0, record_count: 0 },
-        charge: { status: 'skipped', state_count: 0, record_count: 0 },
-        invoice: { status: 'errored', state_count: 0, record_count: 0 },
-        product: { status: 'started', state_count: 0, record_count: 0 },
-        price: { status: 'not_started', state_count: 0, record_count: 0 },
+        customers: { status: 'completed', state_count: 0, record_count: 0 },
+        charges: { status: 'skipped', state_count: 0, record_count: 0 },
+        invoices: { status: 'errored', state_count: 0, record_count: 0 },
+        products: { status: 'started', state_count: 0, record_count: 0 },
+        prices: { status: 'not_started', state_count: 0, record_count: 0 },
       },
     })
 
-    expect(filtered.streams.map((stream) => stream.stream.name)).toEqual(['product', 'price'])
+    expect(filtered.streams.map((stream) => stream.stream.name)).toEqual(['products', 'prices'])
   })
 
   it('passes catalog through when no terminal streams are recorded', () => {
-    const catalog = makeCatalog([{ name: 'customer' }, { name: 'charge' }])
+    const catalog = makeCatalog([{ name: 'customers' }, { name: 'charges' }])
 
     const filtered = excludeTerminalStreams(catalog, {
       streams: {
-        customer: { status: 'started', state_count: 0, record_count: 0 },
-        charge: { status: 'not_started', state_count: 0, record_count: 0 },
+        customers: { status: 'started', state_count: 0, record_count: 0 },
+        charges: { status: 'not_started', state_count: 0, record_count: 0 },
       },
     })
 
-    expect(filtered.streams.map((stream) => stream.stream.name)).toEqual(['customer', 'charge'])
+    expect(filtered.streams.map((stream) => stream.stream.name)).toEqual(['customers', 'charges'])
   })
 })

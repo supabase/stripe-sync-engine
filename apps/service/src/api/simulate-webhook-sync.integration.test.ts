@@ -100,7 +100,7 @@ describe('simulate_webhook_sync', () => {
           type: 'postgres',
           postgres: { url: POSTGRES_URL, schema: SCHEMA },
         },
-        streams: [{ name: 'product' }],
+        streams: [{ name: 'products' }],
       }),
     })
     expect(createRes.status).toBe(201)
@@ -125,7 +125,7 @@ describe('simulate_webhook_sync', () => {
     expect(syncBody).toContain('"type":"eof"')
 
     // 5. Assert the product row landed in Postgres
-    const { rows } = await pool.query(`SELECT id FROM "${SCHEMA}"."product" WHERE id = $1`, [
+    const { rows } = await pool.query(`SELECT id FROM "${SCHEMA}"."products" WHERE id = $1`, [
       product.id,
     ])
     expect(rows).toHaveLength(1)

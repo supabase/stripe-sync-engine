@@ -16,7 +16,7 @@ export interface Logger {
 export type BaseResourceConfig = {
   /** Backfill order: lower numbers sync first; parents before children for FK dependencies */
   order: number
-  /** Database table name for this resource (e.g. 'customer', 'invoice') */
+  /** Database table name for this resource (e.g. 'customers', 'invoices') */
   tableName: string
   /** Whether this resource supports incremental sync via 'created' filter or cursor */
   supportsCreatedFilter: boolean

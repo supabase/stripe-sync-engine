@@ -39,7 +39,7 @@ describe('events polling (integration — stripe-mock)', () => {
   const catalog: ConfiguredCatalog = {
     streams: [
       {
-        stream: { name: 'customer', primary_key: [['id']], newer_than_field: '_updated_at' },
+        stream: { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
         sync_mode: 'incremental',
         destination_sync_mode: 'append_dedup',
       },
@@ -49,7 +49,7 @@ describe('events polling (integration — stripe-mock)', () => {
   it('fetches and processes events from stripe-mock', async () => {
     // State: all streams complete with events_cursor in the past
     const state: Record<string, StreamState> = {
-      customer: { page_cursor: null, status: 'complete', events_cursor: 0 },
+      customers: { page_cursor: null, status: 'complete', events_cursor: 0 },
     }
 
     const messages = await collect(source.read({ config, catalog, state }))
@@ -69,13 +69,13 @@ describe('events polling (integration — stripe-mock)', () => {
     // If we got records, verify they have data
     for (const r of records) {
       expect(r.data).toBeDefined()
-      expect(r.stream).toBe('customer')
+      expect(r.stream).toBe('customers')
     }
   })
 
   it('preserves status: complete in all state messages during polling', async () => {
     const state: Record<string, StreamState> = {
-      customer: { page_cursor: null, status: 'complete', events_cursor: 0 },
+      customers: { page_cursor: null, status: 'complete', events_cursor: 0 },
     }
 
     const messages = await collect(source.read({ config, catalog, state }))

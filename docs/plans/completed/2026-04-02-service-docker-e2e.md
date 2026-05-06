@@ -82,8 +82,8 @@ caches by dockerfile + context).
 - POST `/pipelines` to `localhost:4020` with:
   - `source`: `{ type: 'stripe', api_key: STRIPE_API_KEY }` — real Stripe
   - `destination`: `{ type: 'postgres', connection_string: 'postgresql://postgres:postgres@postgres:5432/postgres', schema: SCHEMA }`
-  - `streams`: `[{ name: 'product', backfill_limit: 500 }]`
-- `pollUntil` rows appear in `"SCHEMA"."product"` on `localhost:55432`
+  - `streams`: `[{ name: 'products', backfill_limit: 500 }]`
+- `pollUntil` rows appear in `"SCHEMA"."products"` on `localhost:55432`
 - Assert `count > 0` and `id` matches `/^prod_/`
 - DELETE `/pipelines/{id}` and assert `{ deleted: true }`
 - Assert GET `/pipelines/{id}` returns 404
@@ -123,7 +123,7 @@ STRIPE_API_KEY=sk_... SKIP_CLEANUP=1 pnpm test:e2e ...
 
 ## Design decisions
 
-- **`backfill_limit: 500`** on the `product` stream — caps backfill at 500
+- **`backfill_limit: 500`** on the `products` stream — caps backfill at 500
   records for test speed while still exercising real pagination.
 - **Real Stripe, real Postgres** — no mocks. The worker container reaches
   `api.stripe.com` via standard outbound internet.

@@ -164,9 +164,6 @@ importers:
       '@stripe/sync-destination-postgres':
         specifier: workspace:*
         version: link:../../packages/destination-postgres
-      '@stripe/sync-destination-stripe':
-        specifier: workspace:*
-        version: link:../../packages/destination-stripe
       '@stripe/sync-hono-zod-openapi':
         specifier: workspace:*
         version: link:../../packages/hono-zod-openapi
@@ -176,9 +173,6 @@ importers:
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@stripe/sync-source-postgres':
-        specifier: workspace:*
-        version: link:../../packages/source-postgres
       '@stripe/sync-source-stripe':
         specifier: workspace:*
         version: link:../../packages/source-stripe
@@ -436,9 +430,6 @@ importers:
       '@stripe/sync-destination-postgres':
         specifier: workspace:*
         version: link:../packages/destination-postgres
-      '@stripe/sync-destination-stripe':
-        specifier: workspace:*
-        version: link:../packages/destination-stripe
       '@stripe/sync-engine':
         specifier: workspace:*
         version: link:../apps/engine
@@ -451,9 +442,6 @@ importers:
       '@stripe/sync-service':
         specifier: workspace:*
         version: link:../apps/service
-      '@stripe/sync-source-postgres':
-        specifier: workspace:*
-        version: link:../packages/source-postgres
       '@stripe/sync-source-stripe':
         specifier: workspace:*
         version: link:../packages/source-stripe
@@ -541,28 +529,6 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1)
 
-  packages/destination-stripe:
-    dependencies:
-      '@stripe/sync-logger':
-        specifier: workspace:*
-        version: link:../logger
-      '@stripe/sync-openapi':
-        specifier: workspace:*
-        version: link:../openapi
-      '@stripe/sync-protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
-    devDependencies:
-      '@types/node':
-        specifier: ^24.10.1
-        version: 24.10.1
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1)
-
   packages/hono-zod-openapi:
     dependencies:
       '@hono/zod-validator':
@@ -641,31 +607,6 @@ importers:
       vitest:
         specifier: ^3.2.1
         version: 3.2.4(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1)
-
-  packages/source-postgres:
-    dependencies:
-      '@stripe/sync-logger':
-        specifier: workspace:*
-        version: link:../logger
-      '@stripe/sync-protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@stripe/sync-util-postgres':
-        specifier: workspace:*
-        version: link:../util-postgres
-      pg:
-        specifier: ^8.16.3
-        version: 8.16.3
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
-    devDependencies:
-      '@types/pg':
-        specifier: ^8.15.5
-        version: 8.20.0
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/source-stripe:
     dependencies:
@@ -4720,7 +4661,6 @@ packages:
 
   uuid@9.0.1:
     resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
-    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   vite-node@3.2.4:
@@ -7321,14 +7261,6 @@ snapshots:
       chai: 5.2.0
       tinyrainbow: 2.0.0
 
-  '@vitest/mocker@3.2.4(vite@7.2.2(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1))':
-    dependencies:
-      '@vitest/spy': 3.2.4
-      estree-walker: 3.0.3
-      magic-string: 0.30.21
-    optionalDependencies:
-      vite: 7.2.2(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1)
-
   '@vitest/mocker@3.2.4(vite@7.2.2(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1))':
     dependencies:
       '@vitest/spy': 3.2.4
@@ -9391,7 +9323,7 @@ snapshots:
     dependencies:
       '@types/chai': 5.2.2
       '@vitest/expect': 3.2.4
-      '@vitest/mocker': 3.2.4(vite@7.2.2(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1))
+      '@vitest/mocker': 3.2.4(vite@7.2.2(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1))
       '@vitest/pretty-format': 3.2.4
       '@vitest/runner': 3.2.4
       '@vitest/snapshot': 3.2.4

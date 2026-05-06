@@ -30,7 +30,7 @@ const pipeline: PipelineConfig = {
       batch_size: 50,
     },
   },
-  streams: [{ name: 'product' }, { name: 'customer' }],
+  streams: [{ name: 'products' }, { name: 'customers' }],
 }
 
 const resolver = await createConnectorResolver(defaultConnectors, { path: true })

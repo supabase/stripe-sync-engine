@@ -103,9 +103,9 @@ export interface Transform {
  *
  * Example:
  *   const pipeline = compose(
- *       filter_stream('customer'),
+ *       filter_stream('customers'),
  *       select_fields(['id', 'name', 'email']),
- *       rename_stream('customer', 'user'),
+ *       rename_stream('customers', 'users'),
  *   );
  *   const output = pipeline(source.read(streams));
  */

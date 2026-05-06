@@ -290,7 +290,7 @@ curl -X POST http://localhost:4020/syncs \
   -d '{
     "source": { "type": "stripe", "api_key": "sk_test_..." },
     "destination": { "type": "postgres", "connection_string": "postgresql://..." },
-    "streams": [{ "name": "product" }]
+    "streams": [{ "name": "products" }]
   }'
 
 # Check workflow status
@@ -325,7 +325,7 @@ Point Stripe's webhook dashboard at the **webhook server** (`http://your-host:40
 **Stripe → Postgres** (requires `STRIPE_API_KEY`):
 
 1. Creates sync via service API
-2. Backfills product from Stripe into Postgres
+2. Backfills products from Stripe into Postgres
 3. Updates a product via Stripe API, signals the event to the workflow
 4. Verifies the live update landed in Postgres
 5. Signals delete, verifies teardown (schema dropped)
@@ -333,7 +333,7 @@ Point Stripe's webhook dashboard at the **webhook server** (`http://your-host:40
 **Stripe → Google Sheets** (requires `STRIPE_API_KEY` + Google OAuth creds):
 
 1. Creates sync via service API
-2. Backfills product into a Google Sheet tab
+2. Backfills products into a Google Sheet tab
 3. Verifies row count and data shape
 4. Cleans up the test tab
 

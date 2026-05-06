@@ -237,7 +237,7 @@ export function createStripeSource(
             url: config.webhook_url,
             enabled_events: ['*'],
             metadata: { managed_by: 'stripe-sync' },
-            api_version: config.api_version ?? BUNDLED_API_VERSION,
+            api_version: config.api_version ?? BUNDLED_API_VERSION
           })
           // Secret is only available at creation time — not on list/retrieve
           if (!config.webhook_secret && created.secret) {

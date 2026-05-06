@@ -26,12 +26,12 @@ State is a flat `Record<string, TStreamState>` map keyed by stream name. No mode
 ```ts
 // Airbyte: array of state messages with type/stream_descriptor/global discriminators
 [
-  { type: "STREAM", stream_descriptor: { name: "customer", namespace: "public" }, stream_state: { cursor: "..." } },
+  { type: "STREAM", stream_descriptor: { name: "customers", namespace: "public" }, stream_state: { cursor: "..." } },
   { type: "GLOBAL", global: { shared_state: { cdc_lsn: "..." }, stream_states: [...] } }
 ]
 
 // Ours: flat map
-{ customer: { cursor: "cus_999" }, invoice: { cursor: "inv_500" } }
+{ customers: { cursor: "cus_999" }, invoices: { cursor: "inv_500" } }
 ```
 
 ### No namespace

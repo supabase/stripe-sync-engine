@@ -66,7 +66,7 @@ export type DestinationConfig =
 export type SyncStatus = 'backfilling' | 'syncing' | 'paused' | 'error'
 
 export interface StreamConfig {
-  /** Stream name (e.g. "customer", "invoice"). */
+  /** Stream name (e.g. "customers", "invoices"). */
   name: string
   /** 'incremental' (default) or 'full_refresh'. */
   sync_mode?: 'incremental' | 'full_refresh'
@@ -100,7 +100,7 @@ export type Sync = {
   /**
    * Per-stream checkpoint map. Managed by the orchestrator.
    * Keyed by stream name, values are opaque to everything except the source.
-   * e.g. { "customer": { "after": "cus_999" }, "invoice": { "after": "inv_500" } }
+   * e.g. { "customers": { "after": "cus_999" }, "invoices": { "after": "inv_500" } }
    */
   state?: Record<string, unknown>
 }

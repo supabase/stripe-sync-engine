@@ -63,5 +63,5 @@ export async function upsertSubscriptionItems(
     quantity: subscriptionItem.quantity ?? null,
   }))
 
-  await upsertMany(modifiedSubscriptionItems, 'subscription_item', accountId, syncTimestamp)
+  await upsertMany(modifiedSubscriptionItems, 'subscription_items', accountId, syncTimestamp)
 }

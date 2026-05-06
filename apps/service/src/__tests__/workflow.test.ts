@@ -532,7 +532,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
             eof: {
               ...successEof,
               ending_state: {
-                source: { streams: { customer: { cursor: `cus_${syncCallCount}` } }, global: {} },
+                source: { streams: { customers: { cursor: `cus_${syncCallCount}` } }, global: {} },
                 destination: { streams: {}, global: {} },
                 engine: { streams: {}, global: {} },
               },

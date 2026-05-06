@@ -25,11 +25,8 @@ describeWithEnv(
     }
 
     function stripUpdatedAt(rows: unknown[][]): unknown[][] {
-      const header = rows[0] ?? []
-      const indexes = new Set(
-        ['_updated_at', '_synced_at'].map((name) => header.indexOf(name)).filter((idx) => idx >= 0)
-      )
-      return indexes.size === 0 ? rows : rows.map((row) => row.filter((_, i) => !indexes.has(i)))
+      const idx = rows[0]?.indexOf('_updated_at') ?? -1
+      return idx < 0 ? rows : rows.map((row) => row.filter((_, i) => i !== idx))
     }
 
     it.skip('writes records to an existing spreadsheet and reads them back', async () => {

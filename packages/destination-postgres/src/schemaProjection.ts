@@ -39,22 +39,14 @@ export function enumCheckConstraintName(tableName: string, columnName: string): 
   return safeIdentifier(`chk_${tableName}_${columnName}`)
 }
 
-/** Pull the non-null branch out of `{ oneOf: [X, {type:'null'}] }` (either order). Also handles `anyOf`. */
-function unwrapNullable(prop: Record<string, unknown>): Record<string, unknown> {
-  const candidates = (prop.oneOf ?? prop.anyOf) as Array<Record<string, unknown>> | undefined
-  if (!Array.isArray(candidates) || candidates.length === 0) return prop
-  const nonNull = candidates.filter((s) => s?.type !== 'null')
-  if (nonNull.length === 1) return nonNull[0]
-  return prop
-}
-
 function jsonSchemaTypeToPg(prop: Record<string, unknown>): string {
-  const inner = unwrapNullable(prop)
-  const type = inner.type as string | undefined
+  const type = prop.type as string | undefined
+  const format = prop.format as string | undefined
 
   switch (type) {
     case 'string':
-      return 'text'
+      // date-time stays text for safety (no timezone parsing issues)
+      return format === 'date-time' ? 'text' : 'text'
     case 'boolean':
       return 'boolean'
     case 'integer':
@@ -85,8 +77,8 @@ export function jsonSchemaToColumns(jsonSchema: Record<string, unknown>): Column
   const columns: ColumnDef[] = []
   for (const [name, prop] of Object.entries(properties)) {
     if (name === 'id') continue
-    // System columns are hardcoded below; upsertMany writes both.
-    if (name === '_updated_at' || name === '_synced_at') continue
+    // `_updated_at` is hardcoded below; upsertMany writes it (DDR-009).
+    if (name === '_updated_at') continue
 
     const isExpandableRef = prop['x-expandable-reference'] === true
     const pgType = isExpandableRef ? 'text' : jsonSchemaTypeToPg(prop)
@@ -153,10 +145,10 @@ export function buildCreateTableWithSchema(
     const escapedField = field.replace(/'/g, "''")
     return `${quoteIdent(field)} text GENERATED ALWAYS AS ((_raw_data->>'${escapedField}')::text) STORED`
   })
-  // `_updated_at` is source time; `_synced_at` is destination write time.
+  // `_updated_at` kept as legacy non-generated timestamptz for BC; upsertMany writes it (DDR-009).
   const columnDefs = [
     '"_raw_data" jsonb NOT NULL',
-    '"_synced_at" timestamptz NOT NULL DEFAULT now()',
+    '"_last_synced_at" timestamptz',
     '"_updated_at" timestamptz NOT NULL DEFAULT now()',
     ...systemColumnDefs,
     ...pkColumnDefs,

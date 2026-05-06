@@ -30,7 +30,7 @@ function sleep(ms: number): Promise<void> {
 async function countRows(harness: ServiceHarness, schema: string): Promise<number> {
   try {
     const { rows } = await harness.destPool.query<{ n: number }>(
-      `SELECT count(*)::int AS n FROM "${schema}"."customer"`
+      `SELECT count(*)::int AS n FROM "${schema}"."customers"`
     )
     return rows[0]?.n ?? 0
   } catch (err) {
@@ -70,7 +70,7 @@ async function createCustomersPipeline(
           schema,
         },
       },
-      streams: [{ name: 'customer' }],
+      streams: [{ name: 'customers' }],
     } as never,
   })
   expect(error).toBeUndefined()

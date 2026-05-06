@@ -23,7 +23,7 @@ const pipeline: PipelineConfig = {
     type: 'postgres',
     postgres: { url: postgresUrl, schema: 'public', port: 5432, batch_size: 100 },
   },
-  streams: [{ name: 'product' }, { name: 'price' }, { name: 'customer' }],
+  streams: [{ name: 'products' }, { name: 'prices' }, { name: 'customers' }],
 }
 
 const resolver = await createConnectorResolver(defaultConnectors, { path: true })
